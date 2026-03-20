@@ -62,7 +62,6 @@ const renderProfessionalLayout = (doc, invoice, user) => {
                 doc.image(logoBuffer, 40, 40, { width: 60 });
                 headerTextX = 115;
             } else if (user.logo.includes('/uploads/')) {
-                // Local file URL (e.g., http://localhost:5000/uploads/logos/...)
                 // Extract relative path from URL
                 const relativePath = user.logo.split('/uploads/')[1];
                 const fullPath = path.join(__dirname, '..', 'uploads', relativePath);
