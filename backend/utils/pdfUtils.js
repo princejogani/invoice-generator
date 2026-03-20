@@ -1,5 +1,7 @@
 const PDFDocument = require('pdfkit');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 
 const generateInvoicePDF = (invoice, res, user) => {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -51,10 +53,34 @@ const renderProfessionalLayout = (doc, invoice, user) => {
     const borderColor = '#e2e8f0'; // Slate 200
 
     // --- Header ---
-    doc.fillColor(primaryColor).fontSize(22).text(user?.businessName || 'INVOICE', 40, 40, { bold: true });
+    let headerTextX = 40;
+    if (user?.logo) {
+        try {
+            if (user.logo.startsWith('data:image/')) {
+                // Base64 logo
+                const logoBuffer = Buffer.from(user.logo.split(',')[1], 'base64');
+                doc.image(logoBuffer, 40, 40, { width: 60 });
+                headerTextX = 115;
+            } else if (user.logo.includes('/uploads/')) {
+                // Local file URL (e.g., http://localhost:5000/uploads/logos/...)
+                // Extract relative path from URL
+                const relativePath = user.logo.split('/uploads/')[1];
+                const fullPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+                if (fs.existsSync(fullPath)) {
+                    doc.image(fullPath, 40, 40, { width: 60 });
+                    headerTextX = 115;
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to render logo:', e.message);
+        }
+    }
+
+    doc.fillColor(primaryColor).fontSize(22).text(user?.businessName || 'INVOICE', headerTextX, 40, { bold: true });
 
     if (user?.tagline) {
-        doc.fontSize(10).fillColor(secondaryColor).text(user.tagline, 40, 65, { italic: true });
+        doc.fontSize(10).fillColor(secondaryColor).text(user.tagline, headerTextX, 65, { italic: true });
     }
 
     // Invoice Details (Top Right)

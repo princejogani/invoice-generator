@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import AdminUserCreate from './pages/AdminUserCreate';
 import UserList from './pages/UserList';
 import UserEdit from './pages/UserEdit';
+import CustomerPortal from './pages/CustomerPortal';
 import { Menu } from 'lucide-react';
 
 // Protected Route Component
@@ -57,6 +58,7 @@ const AppContent = () => {
 
       <main className="flex-1 overflow-y-auto h-screen relative">
         <Routes>
+          <Route path="/p/:token" element={<CustomerPortal />} />
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
           {/* <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} /> */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

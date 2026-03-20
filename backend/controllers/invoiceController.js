@@ -21,11 +21,11 @@ const createInvoice = async (req, res) => {
     const customerPhone = rawPhone.trim();
 
     // 1. Find or create customer
-    let customer = await Customer.findOne({ userId: req.user._id, phone: customerPhone });
+    let customer = await Customer.findOne({ userId: req.businessId, phone: customerPhone });
 
     if (!customer) {
         customer = await Customer.create({
-            userId: req.user._id,
+            userId: req.businessId,
             name: customerName,
             phone: customerPhone,
         });
@@ -33,7 +33,7 @@ const createInvoice = async (req, res) => {
 
     // 2. Create invoice
     const invoice = await Invoice.create({
-        userId: req.user._id,
+        userId: req.businessId,
         customerId: customer._id,
         customerName,
         customerPhone,
@@ -66,7 +66,7 @@ const getInvoices = async (req, res) => {
 
     try {
         const pipeline = [
-            { $match: { userId: new mongoose.Types.ObjectId(req.user._id) } }
+            { $match: { userId: new mongoose.Types.ObjectId(req.businessId) } }
         ];
 
         if (search) {
@@ -115,7 +115,7 @@ const getInvoices = async (req, res) => {
 const updateInvoiceStatus = async (req, res) => {
     const { id, status } = req.body;
 
-    const invoice = await Invoice.findOne({ _id: id, userId: req.user._id });
+    const invoice = await Invoice.findOne({ _id: id, userId: req.businessId });
 
     if (invoice) {
         const oldStatus = invoice.status;
@@ -146,7 +146,7 @@ const updateInvoiceStatus = async (req, res) => {
 // @access  Private
 const getDashboardStats = async (req, res) => {
     try {
-        const userId = new mongoose.Types.ObjectId(req.user._id);
+        const userId = new mongoose.Types.ObjectId(req.businessId);
 
         const [invoiceStats, customerCount] = await Promise.all([
             Invoice.aggregate([
@@ -180,4 +180,40 @@ const getDashboardStats = async (req, res) => {
     }
 };
 
-module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats };
+// @desc    Export invoices as CSV
+// @route   GET /api/invoice/export
+// @access  Private
+const exportInvoices = async (req, res) => {
+    try {
+        const userId = new mongoose.Types.ObjectId(req.businessId);
+        const { startDate, endDate } = req.query;
+
+        let query = { userId };
+        if (startDate && endDate) {
+            query.createdAt = {
+                $gte: new Date(startDate),
+                $lte: new Date(endDate)
+            };
+        }
+
+        const invoices = await Invoice.find(query).sort({ createdAt: -1 });
+
+        // Manually build CSV
+        let csv = 'Date,InvoiceNo,Customer,Phone,Type,Subtotal,GST,Adjustment,FinalAmount,Status\n';
+        invoices.forEach(inv => {
+            const date = new Date(inv.createdAt).toLocaleDateString('en-IN');
+            const invNo = inv._id.toString().slice(-6).toUpperCase();
+            // Escape commas in customer name
+            const escapedName = inv.customerName.replace(/"/g, '""');
+            csv += `${date},#${invNo},"${escapedName}",${inv.customerPhone},${inv.type},${inv.subtotal},${inv.gst},${inv.adjustment.value},${inv.finalAmount},${inv.status}\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=gst_report_${new Date().toISOString().split('T')[0]}.csv`);
+        res.status(200).send(csv);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices };

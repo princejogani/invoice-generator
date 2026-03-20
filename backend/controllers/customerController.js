@@ -9,7 +9,7 @@ const getCustomers = async (req, res) => {
     const search = req.query.search || '';
     const skip = (page - 1) * limit;
 
-    const query = { userId: req.user._id };
+    const query = { userId: req.businessId };
     if (search) {
         query.$or = [
             { name: { $regex: search, $options: 'i' } },
@@ -35,7 +35,7 @@ const getCustomers = async (req, res) => {
 // @route   GET /api/customer/:id
 // @access  Private
 const getCustomerById = async (req, res) => {
-    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id });
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.businessId });
 
     if (customer) {
         res.json(customer);

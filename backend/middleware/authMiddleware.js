@@ -9,6 +9,13 @@ const protect = async (req, res, next) => {
             token = req.headers.authorization.split(' ')[1];
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             req.user = await User.findById(decoded.id).select('-password');
+            if (!req.user) return res.status(401).json({ message: 'User not found' });
+
+            // SaaS Multi-Staff: Map current request to the correct Business Owner data context
+            req.businessId = (req.user.role === 'staff' && req.user.parentUserId)
+                ? req.user.parentUserId.toString()
+                : req.user._id.toString();
+
             next();
         } catch (error) {
             console.error(error);

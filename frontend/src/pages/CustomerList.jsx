@@ -1,6 +1,6 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Calendar, Search } from 'lucide-react';
+import { User, Phone, Calendar, Search, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { useEffect } from 'react';
 
@@ -28,6 +28,13 @@ const CustomerList = () => {
             console.error(err);
         }
         setLoading(false);
+    };
+
+    const copyPortalLink = (customer) => {
+        const token = customer.portalToken || '';
+        const link = `${window.location.origin}/p/${token}`;
+        navigator.clipboard.writeText(link);
+        alert('Historical portal link copied to clipboard!');
     };
 
     return (
@@ -86,12 +93,21 @@ const CustomerList = () => {
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => navigate(`/invoices?search=${customer.phone}`)}
-                                    className="w-full mt-6 bg-slate-50 text-slate-700 py-2 rounded font-medium hover:bg-slate-100 transition border border-slate-200"
-                                >
-                                    View History
-                                </button>
+                                <div className="flex gap-2 mt-6">
+                                    <button
+                                        onClick={() => navigate(`/invoices?search=${customer.phone}`)}
+                                        className="flex-1 bg-slate-50 text-slate-700 py-2 rounded font-medium hover:bg-slate-100 transition border border-slate-200"
+                                    >
+                                        View History
+                                    </button>
+                                    <button
+                                        onClick={() => copyPortalLink(customer)}
+                                        className="bg-blue-50 text-blue-600 px-3 py-2 rounded font-medium hover:bg-blue-100 transition border border-blue-100"
+                                        title="Copy Portal Link"
+                                    >
+                                        <Share2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>

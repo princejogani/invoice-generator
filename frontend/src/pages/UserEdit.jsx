@@ -18,7 +18,8 @@ const UserEdit = () => {
         bankName: '',
         accountNumber: '',
         ifscCode: '',
-        upiId: ''
+        upiId: '',
+        logo: ''
     });
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(true);
@@ -44,7 +45,8 @@ const UserEdit = () => {
                 bankName: data.bankName || '',
                 accountNumber: data.accountNumber || '',
                 ifscCode: data.ifscCode || '',
-                upiId: data.upiId || ''
+                upiId: data.upiId || '',
+                logo: data.logo || ''
             });
         } catch (err) {
             console.error(err);
@@ -136,12 +138,50 @@ const UserEdit = () => {
                     </div>
                 </section>
 
-                {/* Business Section */}
                 <section className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
                     <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
                         <Building size={20} className="mr-2 text-slate-400" />
                         Business Profile (Locked for User)
                     </h2>
+
+                    <div className="flex flex-col md:flex-row gap-6 mb-8 items-center">
+                        <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center relative group overflow-hidden shrink-0">
+                            {formData.logo ? (
+                                <img src={formData.logo} alt="Logo Preview" className="w-full h-full object-contain" />
+                            ) : (
+                                <Building size={24} className="text-slate-300" />
+                            )}
+                            <div className="absolute inset-0 bg-slate-800/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center cursor-pointer">
+                                <label className="cursor-pointer text-white text-[10px] uppercase font-bold tracking-widest text-center px-1">Upload Logo</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => setFormData({ ...formData, logo: reader.result });
+                                            reader.readAsDataURL(file);
+                                        }
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-slate-800 uppercase tracking-widest">Business Logo</p>
+                            <p className="text-xs text-slate-500 mt-1">Logo for the shop owner's invoices. Square PNG recommended.</p>
+                            {formData.logo && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, logo: '' })}
+                                    className="text-red-500 text-[10px] uppercase font-bold mt-2 hover:underline"
+                                >
+                                    Remove Logo
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">Business Name</label>

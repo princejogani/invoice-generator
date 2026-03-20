@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import api from '../api';
-import { Download, CheckCircle, XCircle, ExternalLink, Search } from 'lucide-react';
+import { Download, CheckCircle, XCircle, ExternalLink, Search, FileDown } from 'lucide-react';
 
 const InvoiceList = () => {
     const location = useLocation();
@@ -62,6 +62,22 @@ const InvoiceList = () => {
         }
     };
 
+    const handleExportCSV = async () => {
+        try {
+            const response = await api.get('/invoice/export', { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `gst_report_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            console.error('Export failed', err);
+            alert('Failed to export report');
+        }
+    };
+
     return (
         <div className="p-4 md:p-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
@@ -81,7 +97,15 @@ const InvoiceList = () => {
                         />
                         <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
                     </div>
-                    <Link to="/invoices/create" className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700 shadow-md transition text-center">
+                    <button
+                        onClick={handleExportCSV}
+                        className="flex items-center justify-center space-x-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-bold hover:bg-slate-200 border border-slate-200 transition text-center"
+                    >
+                        <FileDown size={18} />
+                        <span className="hidden md:inline">Export Report</span>
+                        <span className="md:hidden">Export</span>
+                    </button>
+                    <Link to="/invoices/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition text-center flex items-center justify-center">
                         + New Invoice
                     </Link>
                 </div>
@@ -119,8 +143,8 @@ const InvoiceList = () => {
                                     </td>
                                     <td className="p-4 font-bold text-slate-800 text-sm">₹{inv.finalAmount.toLocaleString()}</td>
                                     <td className="p-4">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${inv.type === 'gst' ? 'bg-blue-100 text-blue-700' :
-                                            inv.type === 'estimate' ? 'bg-purple-100 text-purple-700' :
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${inv.type?.toLowerCase() === 'gst' ? 'bg-blue-100 text-blue-700' :
+                                            inv.type?.toLowerCase() === 'estimate' ? 'bg-purple-100 text-purple-700' :
                                                 'bg-slate-100 text-slate-600'
                                             }`}>
                                             {inv.type}

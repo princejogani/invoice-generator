@@ -12,7 +12,7 @@ const InvoiceSchema = new mongoose.Schema({
             price: { type: Number, required: true }
         }
     ],
-    type: { type: String, enum: ['gst', 'non-gst', 'estimate'], required: true },
+    type: { type: String, enum: ['GST', 'NON-GST', 'ESTIMATE'], required: true },
     subtotal: { type: Number, required: true },
     gstPercentage: { type: Number, default: 0 },
     gst: { type: Number, default: 0 },

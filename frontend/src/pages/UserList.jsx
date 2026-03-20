@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, ChevronLeft, ChevronRight, Edit3, FileText, Mail, Building, UserPlus } from 'lucide-react';
+import { Users, Search, ChevronLeft, ChevronRight, Edit3, FileText, Mail, Building, UserPlus, LogIn } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const UserList = () => {
     const navigate = useNavigate();
+    const { switchUser } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState('');
@@ -26,6 +28,18 @@ const UserList = () => {
             console.error(err);
         }
         setLoading(false);
+    };
+
+    const handleImpersonate = async (userId) => {
+        if (!window.confirm('Are you sure you want to login as this user?')) return;
+        try {
+            const { data } = await api.get(`/auth/impersonate/${userId}`);
+            switchUser(data);
+            navigate('/');
+        } catch (err) {
+            console.error(err);
+            alert('Failed to impersonate user');
+        }
     };
 
     return (
@@ -111,13 +125,20 @@ const UserList = () => {
                                                 {user.invoiceCount} Generated
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-6 py-4 flex items-center space-x-4">
                                             <button
                                                 onClick={() => navigate(`/admin/edit-user/${user._id}`)}
                                                 className="flex items-center space-x-1 text-slate-600 hover:text-blue-600 font-bold text-xs"
                                             >
                                                 <Edit3 size={14} />
-                                                <span>Edit Profile</span>
+                                                <span>Edit</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleImpersonate(user._id)}
+                                                className="flex items-center space-x-1 text-slate-600 hover:text-green-600 font-bold text-xs"
+                                            >
+                                                <LogIn size={14} />
+                                                <span>Login As</span>
                                             </button>
                                         </td>
                                     </tr>

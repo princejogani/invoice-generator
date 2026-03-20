@@ -21,6 +21,9 @@ const UserSchema = new mongoose.Schema({
     accountNumber: { type: String, default: '' },
     ifscCode: { type: String, default: '' },
     upiId: { type: String, default: '' },
+    logo: { type: String, default: '' }, // Base64 logo
+    parentUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // For Staff accounts
+    role: { type: String, enum: ['admin', 'user', 'staff'], default: 'user' },
     createdAt: { type: Date, default: Date.now }
 });
 

@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Invoice = require('../models/Invoice');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { saveBase64Image } = require('../utils/fileUpload');
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
@@ -71,22 +72,34 @@ const loginUser = async (req, res) => {
 // @route   GET /api/auth/profile
 // @access  Private
 const getUserProfile = async (req, res) => {
-    const user = await User.findById(req.user._id);
+    try {
+        // In SaaS, the current business context might be a parent user (for staff)
+        const businessUser = await User.findById(req.businessId);
+        const currentUser = await User.findById(req.user._id);
 
-    if (user) {
-        res.json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            whatsappTemplate: user.whatsappTemplate,
-            businessName: user.businessName,
-            gstin: user.gstin,
-            businessAddress: user.businessAddress,
-            businessPhone: user.businessPhone
-        });
-    } else {
-        res.status(404).json({ message: 'User not found' });
+        if (currentUser && businessUser) {
+            res.json({
+                _id: currentUser._id,
+                name: currentUser.name,
+                email: currentUser.email,
+                role: currentUser.role,
+                whatsappTemplate: businessUser.whatsappTemplate,
+                businessName: businessUser.businessName,
+                tagline: businessUser.tagline,
+                gstin: businessUser.gstin,
+                businessAddress: businessUser.businessAddress,
+                businessPhone: businessUser.businessPhone,
+                bankName: businessUser.bankName,
+                accountNumber: businessUser.accountNumber,
+                ifscCode: businessUser.ifscCode,
+                upiId: businessUser.upiId,
+                logo: businessUser.logo
+            });
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 };
 
@@ -94,42 +107,65 @@ const getUserProfile = async (req, res) => {
 // @route   PUT /api/auth/profile
 // @access  Private
 const updateUserProfile = async (req, res) => {
-    const user = await User.findById(req.user._id);
+    try {
+        const user = await User.findById(req.user._id);
+        const businessUser = await User.findById(req.businessId);
 
-    if (user) {
-        user.name = req.body.name || user.name;
-        user.email = req.body.email || user.email;
-        user.whatsappTemplate = req.body.whatsappTemplate || user.whatsappTemplate;
+        if (user && businessUser) {
+            // Update personal details
+            user.name = req.body.name || user.name;
+            user.email = req.body.email || user.email;
 
-        // Only admins can update business details
-        if (user.role === 'admin') {
-            user.businessName = req.body.businessName || user.businessName;
-            user.gstin = req.body.gstin || user.gstin;
-            user.businessAddress = req.body.businessAddress || user.businessAddress;
-            user.businessPhone = req.body.businessPhone || user.businessPhone;
+            if (req.body.password) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(req.body.password, salt);
+            }
+
+            await user.save();
+
+            // Only update business details if the user is the owner (not staff)
+            if (user.role !== 'staff') {
+                businessUser.whatsappTemplate = req.body.whatsappTemplate || businessUser.whatsappTemplate;
+                businessUser.businessName = req.body.businessName || businessUser.businessName;
+                businessUser.tagline = req.body.tagline || businessUser.tagline;
+                businessUser.gstin = req.body.gstin || businessUser.gstin;
+                businessUser.businessAddress = req.body.businessAddress || businessUser.businessAddress;
+                businessUser.businessPhone = req.body.businessPhone || businessUser.businessPhone;
+                businessUser.bankName = req.body.bankName || businessUser.bankName;
+                businessUser.accountNumber = req.body.accountNumber || businessUser.accountNumber;
+                businessUser.ifscCode = req.body.ifscCode || businessUser.ifscCode;
+                businessUser.upiId = req.body.upiId || businessUser.upiId;
+
+                if (req.body.logo !== undefined) {
+                    businessUser.logo = saveBase64Image(req.body.logo, 'logos', businessUser._id.toString());
+                }
+
+                await businessUser.save();
+            }
+
+            res.json({
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                whatsappTemplate: businessUser.whatsappTemplate,
+                businessName: businessUser.businessName,
+                tagline: businessUser.tagline,
+                gstin: businessUser.gstin,
+                businessAddress: businessUser.businessAddress,
+                businessPhone: businessUser.businessPhone,
+                bankName: businessUser.bankName,
+                accountNumber: businessUser.accountNumber,
+                ifscCode: businessUser.ifscCode,
+                upiId: businessUser.upiId,
+                logo: businessUser.logo,
+                token: generateToken(user._id),
+            });
+        } else {
+            res.status(404).json({ message: 'User not found' });
         }
-
-        if (req.body.password) {
-            const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(req.body.password, salt);
-        }
-
-        const updatedUser = await user.save();
-
-        res.json({
-            _id: updatedUser._id,
-            name: updatedUser.name,
-            email: updatedUser.email,
-            role: updatedUser.role,
-            whatsappTemplate: updatedUser.whatsappTemplate,
-            businessName: updatedUser.businessName,
-            gstin: updatedUser.gstin,
-            businessAddress: updatedUser.businessAddress,
-            businessPhone: updatedUser.businessPhone,
-            token: generateToken(updatedUser._id),
-        });
-    } else {
-        res.status(404).json({ message: 'User not found' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 };
 
@@ -137,7 +173,7 @@ const updateUserProfile = async (req, res) => {
 // @route   POST /api/auth/create-user
 // @access  Private/Admin
 const adminCreateUser = async (req, res) => {
-    const { name, email, password, businessName, gstin, businessAddress, businessPhone } = req.body;
+    const { name, email, password, businessName, gstin, businessAddress, businessPhone, logo } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -147,7 +183,7 @@ const adminCreateUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await User.create({
+    const user = new User({
         name,
         email,
         password: hashedPassword,
@@ -158,12 +194,19 @@ const adminCreateUser = async (req, res) => {
         role: 'user' // Default to shop owner
     });
 
+    if (logo) {
+        user.logo = saveBase64Image(logo, 'logos', user._id.toString());
+    }
+
+    await user.save();
+
     if (user) {
         res.status(201).json({
             _id: user._id,
             name: user.name,
             email: user.email,
             businessName: user.businessName,
+            logo: user.logo,
             message: 'User created successfully'
         });
     } else {
@@ -234,6 +277,9 @@ const adminUpdateUser = async (req, res) => {
         user.accountNumber = req.body.accountNumber || user.accountNumber;
         user.ifscCode = req.body.ifscCode || user.ifscCode;
         user.upiId = req.body.upiId || user.upiId;
+        if (req.body.logo !== undefined) {
+            user.logo = saveBase64Image(req.body.logo, 'logos', user._id.toString());
+        }
 
         if (req.body.password) {
             const salt = await bcrypt.genSalt(10);
@@ -246,6 +292,15 @@ const adminUpdateUser = async (req, res) => {
             name: updatedUser.name,
             email: updatedUser.email,
             businessName: updatedUser.businessName,
+            tagline: updatedUser.tagline,
+            gstin: updatedUser.gstin,
+            businessAddress: updatedUser.businessAddress,
+            businessPhone: updatedUser.businessPhone,
+            bankName: updatedUser.bankName,
+            accountNumber: updatedUser.accountNumber,
+            ifscCode: updatedUser.ifscCode,
+            upiId: updatedUser.upiId,
+            logo: updatedUser.logo,
             message: 'User updated successfully'
         });
     } catch (error) {
@@ -261,6 +316,8 @@ const getUserById = async (req, res) => {
         const user = await User.findById(req.params.id).select('-password').lean();
         if (!user) return res.status(404).json({ message: 'User not found' });
 
+        console.log('Fetching user:', user._id, 'Logo exists:', !!user.logo);
+
         const invoiceCount = await Invoice.countDocuments({ userId: user._id });
         res.json({ ...user, invoiceCount });
     } catch (error) {
@@ -268,4 +325,91 @@ const getUserById = async (req, res) => {
     }
 };
 
-module.exports = { registerUser, loginUser, getUserProfile, updateUserProfile, adminCreateUser, getAllUsers, adminUpdateUser, getUserById };
+// @desc    Store owner creates a staff account
+// @route   POST /api/auth/staff
+// @access  Private/User (Shop Owner)
+const createStaff = async (req, res) => {
+    const { name, email, password } = req.body;
+
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+        return res.status(400).json({ message: 'User already exists' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const staff = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+        role: 'staff',
+        parentUserId: req.user._id,
+        businessName: req.user.businessName,
+        gstin: req.user.gstin,
+        businessAddress: req.user.businessAddress,
+        businessPhone: req.user.businessPhone
+    });
+
+    res.status(201).json({
+        _id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role
+    });
+};
+
+// @desc    Store owner gets all their staff
+// @route   GET /api/auth/staff
+// @access  Private/User (Shop Owner)
+const getStaff = async (req, res) => {
+    const staff = await User.find({ parentUserId: req.user._id, role: 'staff' }).select('-password');
+    res.json(staff);
+};
+
+// @desc    Store owner deletes a staff account
+// @route   DELETE /api/auth/staff/:id
+// @access  Private/User (Shop Owner)
+const deleteStaff = async (req, res) => {
+    const staff = await User.findOne({ _id: req.params.id, parentUserId: req.user._id });
+    if (!staff) return res.status(404).json({ message: 'Staff member not found' });
+
+    await User.deleteOne({ _id: req.params.id });
+    res.json({ message: 'Staff member removed successfully' });
+};
+
+// @desc    Admin impersonate user
+// @route   GET /api/auth/impersonate/:id
+// @access  Private/Admin
+const impersonateUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            businessName: user.businessName,
+            token: generateToken(user._id)
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = {
+    registerUser,
+    loginUser,
+    getUserProfile,
+    updateUserProfile,
+    adminCreateUser,
+    getAllUsers,
+    adminUpdateUser,
+    getUserById,
+    createStaff,
+    getStaff,
+    deleteStaff,
+    impersonateUser
+};

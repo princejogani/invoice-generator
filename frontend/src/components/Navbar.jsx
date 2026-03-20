@@ -13,8 +13,11 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
         { to: '/invoices', icon: FileText, label: 'Invoices' },
         { to: '/invoices/create', icon: Plus, label: 'New Invoice' },
         { to: '/customers', icon: Users, label: 'Customers' },
-        { to: '/settings', icon: Settings, label: 'Settings' },
     ];
+
+    if (user?.role !== 'staff') {
+        navLinks.push({ to: '/settings', icon: Settings, label: 'Settings' });
+    }
 
     if (user?.role === 'admin') {
         navLinks.push({ to: '/admin/users', icon: ShieldCheck, label: 'User Management' });
@@ -38,8 +41,8 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
 
             <nav className={sidebarClasses}>
                 <div className="flex items-center justify-between mb-8 p-2">
-                    <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-                        InvoiceSaaS
+                    <div className="text-2xl font-black bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent italic">
+                        Saras Invoicing
                     </div>
                     <button onClick={toggleSidebar} className="lg:hidden text-slate-400 hover:text-white">
                         <X size={24} />
