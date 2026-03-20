@@ -27,25 +27,8 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const [invoices, customers] = await Promise.all([
-                    api.get('/invoice/list'),
-                    api.get('/customer/list')
-                ]);
-
-                const totalInvoices = invoices.data.length;
-                const paidAmount = invoices.data
-                    .filter(inv => inv.status === 'paid')
-                    .reduce((sum, inv) => sum + inv.finalAmount, 0);
-                const pendingAmount = invoices.data
-                    .filter(inv => inv.status === 'unpaid')
-                    .reduce((sum, inv) => sum + inv.finalAmount, 0);
-
-                setStats({
-                    totalInvoices,
-                    paidAmount,
-                    pendingAmount,
-                    totalCustomers: customers.data.length
-                });
+                const { data } = await api.get('/invoice/stats');
+                setStats(data);
             } catch (err) {
                 console.error(err);
             }

@@ -8,6 +8,19 @@ const UserSchema = new mongoose.Schema({
     plan: { type: String, enum: ['free', 'paid'], default: 'free' },
     isActive: { type: Boolean, default: true },
     whatsappSession: { type: Object, default: null },
+    whatsappTemplate: {
+        type: String,
+        default: 'Hello {{customerName}}, your invoice for {{amount}} from {{businessName}} is ready. Download it here.'
+    },
+    businessName: { type: String, default: '' },
+    tagline: { type: String, default: '' },
+    gstin: { type: String, default: '' },
+    businessAddress: { type: String, default: '' },
+    businessPhone: { type: String, default: '' },
+    bankName: { type: String, default: '' },
+    accountNumber: { type: String, default: '' },
+    ifscCode: { type: String, default: '' },
+    upiId: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now }
 });
 

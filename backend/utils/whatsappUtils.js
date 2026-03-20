@@ -47,7 +47,15 @@ const sendInvoiceWhatsApp = async (userId, phone, message, pdfBuffer) => {
     const client = clients[userId];
     if (!client) throw new Error('WhatsApp not initialized');
 
-    const chatId = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+    // Remove any non-digits for getNumberId
+    const cleanedPhone = phone.replace(/\D/g, '');
+    const numberId = await client.getNumberId(cleanedPhone);
+
+    if (!numberId) {
+        throw new Error(`The number ${cleanedPhone} is not registered on WhatsApp.`);
+    }
+
+    const chatId = numberId._serialized;
 
     if (pdfBuffer) {
         const media = new MessageMedia('application/pdf', pdfBuffer.toString('base64'), 'invoice.pdf');

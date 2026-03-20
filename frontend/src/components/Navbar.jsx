@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, FileText, Users, Settings, LogOut, Plus, X, Menu } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Settings, LogOut, Plus, X, Menu, ShieldCheck } from 'lucide-react';
 
 const Navbar = ({ isOpen, toggleSidebar }) => {
     const { user, logout } = useAuth();
@@ -15,6 +15,10 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
         { to: '/customers', icon: Users, label: 'Customers' },
         { to: '/settings', icon: Settings, label: 'Settings' },
     ];
+
+    if (user?.role === 'admin') {
+        navLinks.push({ to: '/admin/users', icon: ShieldCheck, label: 'User Management' });
+    }
 
     const sidebarClasses = `
     fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white p-4 flex flex-col transition-transform duration-300 ease-in-out transform
@@ -49,8 +53,8 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
                             to={link.to}
                             onClick={() => { if (window.innerWidth < 1024) toggleSidebar(); }}
                             className={`flex items-center space-x-3 p-3 rounded-lg transition ${location.pathname === link.to
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                 }`}
                         >
                             <link.icon size={20} />

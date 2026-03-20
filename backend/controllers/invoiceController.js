@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Invoice = require('../models/Invoice');
 const Customer = require('../models/Customer');
 
@@ -5,7 +6,19 @@ const Customer = require('../models/Customer');
 // @route   POST /api/invoice/create
 // @access  Private
 const createInvoice = async (req, res) => {
-    const { customerName, customerPhone, items, type, subtotal, gst, finalAmount } = req.body;
+    const {
+        customerName,
+        customerPhone: rawPhone,
+        items,
+        type,
+        subtotal,
+        gst,
+        gstPercentage,
+        adjustment,
+        finalAmount
+    } = req.body;
+
+    const customerPhone = rawPhone.trim();
 
     // 1. Find or create customer
     let customer = await Customer.findOne({ userId: req.user._id, phone: customerPhone });
@@ -27,7 +40,9 @@ const createInvoice = async (req, res) => {
         items,
         type,
         subtotal,
+        gstPercentage: gstPercentage || 0,
         gst,
+        adjustment: adjustment || { value: 0, type: 'none' },
         finalAmount,
     });
 
@@ -44,8 +59,54 @@ const createInvoice = async (req, res) => {
 // @route   GET /api/invoice/list
 // @access  Private
 const getInvoices = async (req, res) => {
-    const invoices = await Invoice.find({ userId: req.user._id }).sort({ createdAt: -1 });
-    res.json(invoices);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const skip = (page - 1) * limit;
+
+    try {
+        const pipeline = [
+            { $match: { userId: new mongoose.Types.ObjectId(req.user._id) } }
+        ];
+
+        if (search) {
+            const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            pipeline.push({
+                $addFields: {
+                    idString: { $toString: "$_id" }
+                }
+            });
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { customerName: { $regex: escapedSearch, $options: 'i' } },
+                        { customerPhone: { $regex: escapedSearch, $options: 'i' } },
+                        { idString: { $regex: escapedSearch, $options: 'i' } }
+                    ]
+                }
+            });
+        }
+
+        const countPipeline = [...pipeline, { $count: "total" }];
+        const totalResult = await Invoice.aggregate(countPipeline);
+        const total = totalResult[0]?.total || 0;
+
+        const invoices = await Invoice.aggregate([
+            ...pipeline,
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit }
+        ]);
+
+        res.json({
+            invoices,
+            page,
+            pages: Math.ceil(total / limit),
+            total
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 // @desc    Update invoice status
@@ -80,4 +141,43 @@ const updateInvoiceStatus = async (req, res) => {
     }
 };
 
-module.exports = { createInvoice, getInvoices, updateInvoiceStatus };
+// @desc    Get dashboard stats
+// @route   GET /api/invoice/stats
+// @access  Private
+const getDashboardStats = async (req, res) => {
+    try {
+        const userId = new mongoose.Types.ObjectId(req.user._id);
+
+        const [invoiceStats, customerCount] = await Promise.all([
+            Invoice.aggregate([
+                { $match: { userId } },
+                {
+                    $group: {
+                        _id: null,
+                        totalInvoices: { $sum: 1 },
+                        paidAmount: {
+                            $sum: { $cond: [{ $eq: ["$status", "paid"] }, "$finalAmount", 0] }
+                        },
+                        pendingAmount: {
+                            $sum: { $cond: [{ $eq: ["$status", "unpaid"] }, "$finalAmount", 0] }
+                        }
+                    }
+                }
+            ]),
+            Customer.countDocuments({ userId })
+        ]);
+
+        const stats = invoiceStats[0] || { totalInvoices: 0, paidAmount: 0, pendingAmount: 0 };
+
+        res.json({
+            totalInvoices: stats.totalInvoices,
+            paidAmount: stats.paidAmount,
+            pendingAmount: stats.pendingAmount,
+            totalCustomers: customerCount
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats };

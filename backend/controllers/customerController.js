@@ -4,8 +4,31 @@ const Customer = require('../models/Customer');
 // @route   GET /api/customer/list
 // @access  Private
 const getCustomers = async (req, res) => {
-    const customers = await Customer.find({ userId: req.user._id });
-    res.json(customers);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const skip = (page - 1) * limit;
+
+    const query = { userId: req.user._id };
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } }
+        ];
+    }
+
+    const total = await Customer.countDocuments(query);
+    const customers = await Customer.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json({
+        customers,
+        page,
+        pages: Math.ceil(total / limit),
+        total
+    });
 };
 
 // @desc    Get single customer by ID

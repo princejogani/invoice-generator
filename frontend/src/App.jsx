@@ -9,6 +9,9 @@ import CreateInvoice from './pages/CreateInvoice';
 import InvoiceList from './pages/InvoiceList';
 import CustomerList from './pages/CustomerList';
 import Settings from './pages/Settings';
+import AdminUserCreate from './pages/AdminUserCreate';
+import UserList from './pages/UserList';
+import UserEdit from './pages/UserEdit';
 import { Menu } from 'lucide-react';
 
 // Protected Route Component
@@ -17,6 +20,16 @@ const ProtectedRoute = ({ children }) => {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
+
+  return children;
+};
+
+// Admin Route Component
+const AdminRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!user || user.role !== 'admin') return <Navigate to="/" />;
 
   return children;
 };
@@ -45,12 +58,15 @@ const AppContent = () => {
       <main className="flex-1 overflow-y-auto h-screen relative">
         <Routes>
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
+          {/* <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} /> */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
           <Route path="/invoices/create" element={<ProtectedRoute><CreateInvoice /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><CustomerList /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/admin/create-user" element={<AdminRoute><AdminUserCreate /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><UserList /></AdminRoute>} />
+          <Route path="/admin/edit-user/:id" element={<AdminRoute><UserEdit /></AdminRoute>} />
         </Routes>
       </main>
     </div>
