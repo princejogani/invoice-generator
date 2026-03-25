@@ -16,10 +16,14 @@ const InvoiceSchema = new mongoose.Schema({
     subtotal: { type: Number, required: true },
     gstPercentage: { type: Number, default: 0 },
     gst: { type: Number, default: 0 },
-    adjustment: {
-        value: { type: Number, default: 0 },
-        type: { type: String, enum: ['none', 'percent', 'fixed'], default: 'none' }
-    },
+    adjustments: [
+        {
+            label: { type: String, required: true },
+            value: { type: Number, required: true },
+            type: { type: String, enum: ['fixed', 'percent'], default: 'fixed' },
+            operation: { type: String, enum: ['add', 'subtract'], default: 'add' }
+        }
+    ],
     finalAmount: { type: Number, required: true },
     status: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
     sentOnWhatsapp: { type: Boolean, default: false },

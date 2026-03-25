@@ -14,7 +14,8 @@ const createInvoice = async (req, res) => {
         subtotal,
         gst,
         gstPercentage,
-        adjustment,
+        adjustments,
+        adjustment, // For backward compatibility
         finalAmount
     } = req.body;
 
@@ -31,6 +32,23 @@ const createInvoice = async (req, res) => {
         });
     }
 
+    // Handle backward compatibility: if adjustments is not provided but adjustment is, convert it
+    let invoiceAdjustments = adjustments || [];
+
+    // If old adjustment format is provided (for backward compatibility), convert it
+    if (!adjustments && adjustment && adjustment.type !== 'none') {
+        const label = adjustment.type === 'percent' ? 'Adjustment (%)' : 'Adjustment';
+        const operation = adjustment.value >= 0 ? 'add' : 'subtract';
+        const absValue = Math.abs(adjustment.value);
+
+        invoiceAdjustments = [{
+            label,
+            value: absValue,
+            type: adjustment.type === 'percent' ? 'percent' : 'fixed',
+            operation
+        }];
+    }
+
     // 2. Create invoice
     const invoice = await Invoice.create({
         userId: req.businessId,
@@ -42,7 +60,7 @@ const createInvoice = async (req, res) => {
         subtotal,
         gstPercentage: gstPercentage || 0,
         gst,
-        adjustment: adjustment || { value: 0, type: 'none' },
+        adjustments: invoiceAdjustments,
         finalAmount,
     });
 
@@ -205,7 +223,37 @@ const exportInvoices = async (req, res) => {
             const invNo = inv._id.toString().slice(-6).toUpperCase();
             // Escape commas in customer name
             const escapedName = inv.customerName.replace(/"/g, '""');
-            csv += `${date},#${invNo},"${escapedName}",${inv.customerPhone},${inv.type},${inv.subtotal},${inv.gst},${inv.adjustment.value},${inv.finalAmount},${inv.status}\n`;
+
+            // Calculate total adjustment amount (for backward compatibility)
+            let totalAdjustment = 0;
+
+            // New adjustments array
+            if (inv.adjustments && inv.adjustments.length > 0) {
+                inv.adjustments.forEach(adj => {
+                    let amount = 0;
+                    if (adj.type === 'percent') {
+                        amount = (inv.subtotal * adj.value) / 100;
+                    } else {
+                        amount = adj.value;
+                    }
+
+                    if (adj.operation === 'subtract') {
+                        totalAdjustment -= amount;
+                    } else {
+                        totalAdjustment += amount;
+                    }
+                });
+            }
+            // Old adjustment object (backward compatibility)
+            else if (inv.adjustment && inv.adjustment.value !== 0) {
+                if (inv.adjustment.type === 'percent') {
+                    totalAdjustment = (inv.subtotal * inv.adjustment.value) / 100;
+                } else {
+                    totalAdjustment = inv.adjustment.value;
+                }
+            }
+
+            csv += `${date},#${invNo},"${escapedName}",${inv.customerPhone},${inv.type},${inv.subtotal},${inv.gst},${totalAdjustment},${inv.finalAmount},${inv.status}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');

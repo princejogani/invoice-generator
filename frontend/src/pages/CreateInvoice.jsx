@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Send, ChevronRight, ChevronLeft, Download, Check } from 'lucide-react';
+import { Plus, Trash2, Send, ChevronRight, ChevronLeft, Download, Check, Edit, X } from 'lucide-react';
 
 const CreateInvoice = () => {
     const navigate = useNavigate();
@@ -9,11 +9,12 @@ const CreateInvoice = () => {
     const [items, setItems] = useState([{ name: '', qty: 1, price: 0 }]);
     const [type, setType] = useState('GST');
     const [gstPercentage, setGstPercentage] = useState(18);
-    const [adjustment, setAdjustment] = useState({ value: 0, type: 'none' }); // 'none', 'percentage', 'fixed'
+    const [adjustments, setAdjustments] = useState([]);
     const [sendWhatsApp, setSendWhatsApp] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [loading, setLoading] = useState(false);
     const [whatsappStatus, setWhatsappStatus] = useState('NOT_INITIALIZED');
+    const [newAdjustment, setNewAdjustment] = useState({ label: '', value: '', type: 'fixed', operation: 'add' });
 
     useEffect(() => {
         fetchStatus();
@@ -40,17 +41,65 @@ const CreateInvoice = () => {
         setItems(newItems);
     };
 
+    // Adjustment management functions
+    const addAdjustment = () => {
+        if (!newAdjustment.label.trim() || newAdjustment.value === '') {
+            alert('Please enter adjustment label and value');
+            return;
+        }
+
+        const value = parseFloat(newAdjustment.value);
+        if (isNaN(value)) {
+            alert('Please enter a valid number for adjustment value');
+            return;
+        }
+
+        setAdjustments([...adjustments, {
+            label: newAdjustment.label.trim(),
+            value: value,
+            type: newAdjustment.type,
+            operation: newAdjustment.operation
+        }]);
+
+        // Reset new adjustment form
+        setNewAdjustment({ label: '', value: '', type: 'fixed', operation: 'add' });
+    };
+
+    const updateAdjustment = (index, field, value) => {
+        const newAdjustments = [...adjustments];
+        if (field === 'value') {
+            newAdjustments[index][field] = value === '' ? '' : Number(value);
+        } else {
+            newAdjustments[index][field] = value;
+        }
+        setAdjustments(newAdjustments);
+    };
+
+    const removeAdjustment = (index) => {
+        setAdjustments(adjustments.filter((_, i) => i !== index));
+    };
+
     const subtotal = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
     const gst = type === 'GST' ? (subtotal * gstPercentage) / 100 : 0;
 
-    let adjustmentAmount = 0;
-    if (adjustment.type === 'percent') {
-        adjustmentAmount = (subtotal * adjustment.value) / 100;
-    } else if (adjustment.type === 'fixed') {
-        adjustmentAmount = adjustment.value;
-    }
+    // Calculate total adjustments
+    let totalAdjustments = 0;
+    adjustments.forEach(adj => {
+        let amount = 0;
+        if (adj.type === 'percent') {
+            amount = (subtotal * adj.value) / 100;
+        } else {
+            amount = adj.value;
+        }
 
-    const total = subtotal + gst + adjustmentAmount;
+        if (adj.operation === 'subtract') {
+            totalAdjustments -= amount;
+        } else {
+            totalAdjustments += amount;
+        }
+    });
+
+    const total = subtotal + gst + totalAdjustments;
 
     const handleSubmit = async () => {
         setLoading(true);
@@ -63,7 +112,7 @@ const CreateInvoice = () => {
                 subtotal,
                 gstPercentage,
                 gst,
-                adjustment,
+                adjustments,
                 finalAmount: total
             });
 
@@ -204,39 +253,100 @@ const CreateInvoice = () => {
                 ))}
             </div>
 
-            {/* Adjustment & Total */}
+            {/* Adjustments & Total */}
             <div className="grid grid-cols-1 md:grid-cols-2 pt-6 border-t border-slate-200 gap-8">
                 <div className="bg-slate-50 p-4 rounded-lg">
-                    <label className="block text-sm font-medium text-slate-700 mb-3">Adjustment (+ / -)</label>
-                    <div className="flex space-x-2 mb-3">
-                        {['none', 'percent', 'fixed'].map(adjType => (
-                            <button
-                                key={adjType}
-                                type="button"
-                                onClick={() => setAdjustment({ ...adjustment, type: adjType })}
-                                className={`px-3 py-1 text-xs rounded-full border transition font-medium ${adjustment.type === adjType
-                                    ? 'bg-blue-600 text-white border-blue-600'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                    }`}
-                            >
-                                {adjType === 'none' ? 'No Adj.' : adjType === 'percent' ? 'Percentage %' : 'Fixed Amount ₹'}
-                            </button>
-                        ))}
-                    </div>
-                    {adjustment.type !== 'none' && (
-                        <div className="flex items-center space-x-2 animate-in fade-in slide-in-from-top-2">
-                            <input
-                                type="number"
-                                placeholder={adjustment.type === 'percent' ? 'Percentage %' : 'Amount ₹'}
-                                className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                value={adjustment.value}
-                                onChange={(e) => setAdjustment({ ...adjustment, value: Number(e.target.value) })}
-                            />
-                            <span className="text-slate-400 text-xs whitespace-nowrap">
-                                {adjustment.type === 'percent' ? '% of subtotal' : '₹ fixed'}
-                            </span>
+                    <label className="block text-sm font-medium text-slate-700 mb-3">Adjustments</label>
+
+                    {/* List of existing adjustments */}
+                    {adjustments.length > 0 && (
+                        <div className="space-y-3 mb-4">
+                            {adjustments.map((adj, index) => (
+                                <div key={index} className="flex items-center space-x-2 p-3 bg-white rounded border border-slate-200">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-sm font-medium text-slate-700 truncate">{adj.label}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${adj.operation === 'add' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                {adj.operation === 'add' ? '+' : '-'}
+                                            </span>
+                                            <span className="text-xs text-slate-500">
+                                                {adj.type === 'percent' ? `${adj.value}%` : `₹${adj.value}`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => removeAdjustment(index)}
+                                            className="text-red-500 hover:text-red-600 p-1"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
+
+                    {/* Add new adjustment form */}
+                    <div className="space-y-3 border-t pt-4">
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Label</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g., Shipping, Discount"
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={newAdjustment.label}
+                                    onChange={(e) => setNewAdjustment({ ...newAdjustment, label: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Value</label>
+                                <input
+                                    type="number"
+                                    placeholder={newAdjustment.type === 'percent' ? 'Percentage' : 'Amount'}
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={newAdjustment.value}
+                                    onChange={(e) => setNewAdjustment({ ...newAdjustment, value: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
+                                <select
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={newAdjustment.type}
+                                    onChange={(e) => setNewAdjustment({ ...newAdjustment, type: e.target.value })}
+                                >
+                                    <option value="fixed">Fixed Amount (₹)</option>
+                                    <option value="percent">Percentage (%)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Operation</label>
+                                <select
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={newAdjustment.operation}
+                                    onChange={(e) => setNewAdjustment({ ...newAdjustment, operation: e.target.value })}
+                                >
+                                    <option value="add">Add (+)</option>
+                                    <option value="subtract">Subtract (-)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={addAdjustment}
+                            className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+                        >
+                            <Plus size={16} />
+                            <span>Add Adjustment</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="space-y-3 text-right">
@@ -250,14 +360,26 @@ const CreateInvoice = () => {
                             <span className="font-bold text-slate-800">₹{gst.toLocaleString()}</span>
                         </div>
                     )}
-                    {adjustment.type !== 'none' && (
-                        <div className="flex justify-between text-slate-600">
-                            <span>Adjustment ({adjustment.type}):</span>
-                            <span className={`font-bold ${adjustmentAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {adjustmentAmount >= 0 ? '+' : ''}₹{adjustmentAmount.toLocaleString()}
-                            </span>
-                        </div>
-                    )}
+                    {adjustments.map((adj, index) => {
+                        let amount = 0;
+                        if (adj.type === 'percent') {
+                            amount = (subtotal * adj.value) / 100;
+                        } else {
+                            amount = adj.value;
+                        }
+
+                        // Determine display amount based on operation
+                        const displayAmount = adj.operation === 'subtract' ? -amount : amount;
+
+                        return (
+                            <div key={index} className="flex justify-between text-slate-600">
+                                <span className="text-sm">{adj.label}:</span>
+                                <span className="font-bold text-slate-800">
+                                    ₹{displayAmount.toLocaleString()}
+                                </span>
+                            </div>
+                        );
+                    })}
                     <div className="flex justify-between items-center pt-3 border-t border-slate-100">
                         <span className="text-xl font-bold text-slate-800">Final Total:</span>
                         <span className="text-3xl font-bold text-blue-600">₹{total.toLocaleString()}</span>
@@ -346,14 +468,23 @@ const CreateInvoice = () => {
                                 <span className="font-bold text-slate-800">₹{gst.toLocaleString()}</span>
                             </div>
                         )}
-                        {adjustment.type !== 'none' && (
-                            <div className="flex justify-between text-slate-500 text-sm">
-                                <span>Adjustment</span>
-                                <span className={`font-bold ${adjustmentAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {adjustmentAmount >= 0 ? '+' : ''}₹{adjustmentAmount.toLocaleString()}
-                                </span>
-                            </div>
-                        )}
+                        {adjustments.map((adj, index) => {
+                            let amount = 0;
+                            if (adj.type === 'percent') {
+                                amount = (subtotal * adj.value) / 100;
+                            } else {
+                                amount = adj.value;
+                            }
+
+                            return (
+                                <div key={index} className="flex justify-between text-slate-500 text-sm">
+                                    <span>{adj.label}</span>
+                                    <span className="font-bold text-slate-800">
+                                        {adj.operation === 'add' ? '' : '-'}₹{amount.toLocaleString()}
+                                    </span>
+                                </div>
+                            );
+                        })}
                         <div className="flex justify-between items-center pt-4 border-t-2 border-slate-100">
                             <span className="text-lg font-black text-slate-800">Total</span>
                             <span className="text-2xl font-black text-blue-600">₹{total.toLocaleString()}</span>

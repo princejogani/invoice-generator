@@ -166,11 +166,34 @@ const renderProfessionalLayout = (doc, invoice, user) => {
         renderRow(`GST (${invoice.gstPercentage || 18}%)`, `₹${invoice.gst.toLocaleString()}`);
     }
 
-    if (invoice.adjustment && invoice.adjustment.value !== 0) {
+    // Handle multiple adjustments
+    let totalAdjustments = 0;
+
+    // First, check for new adjustments array
+    if (invoice.adjustments && invoice.adjustments.length > 0) {
+        invoice.adjustments.forEach(adj => {
+            let amount = 0;
+            if (adj.type === 'percent') {
+                amount = (invoice.subtotal * adj.value) / 100;
+            } else {
+                amount = adj.value;
+            }
+
+            const adjAmount = adj.operation === 'subtract' ? -amount : amount;
+            totalAdjustments += adjAmount;
+
+            const adjLabel = adj.type === 'percent' ? `${adj.label} (${adj.value}%)` : adj.label;
+            const displayAmount = adj.operation === 'subtract' ? -amount : amount;
+            renderRow(adjLabel, `${displayAmount >= 0 ? '' : '-'}₹${Math.abs(displayAmount).toLocaleString()}`, false, primaryColor);
+        });
+    }
+    // Backward compatibility: check for old adjustment object
+    else if (invoice.adjustment && invoice.adjustment.value !== 0) {
         const isPercent = invoice.adjustment.type === 'percent';
         const adjAmt = isPercent ? (invoice.subtotal * invoice.adjustment.value / 100) : invoice.adjustment.value;
         const adjLabel = isPercent ? `Adjustment (${invoice.adjustment.value}%)` : 'Adjustment';
-        renderRow(adjLabel, `${adjAmt >= 0 ? '+' : ''}₹${adjAmt.toLocaleString()}`, false, adjAmt >= 0 ? '#10b981' : '#ef4444');
+        totalAdjustments = adjAmt;
+        renderRow(adjLabel, `${adjAmt >= 0 ? '' : '-'}₹${Math.abs(adjAmt).toLocaleString()}`, false, primaryColor);
     }
 
     // Grand Total Box
