@@ -10,6 +10,8 @@ const invoiceRoutes = require('./routes/invoiceRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const startReminderCron = require('./utils/reminderCron');
+const agentRoutes = require('./routes/agentRoutes');
+const agentCronService = require('./agents/agentCron');
 
 dotenv.config();
 
@@ -29,6 +31,7 @@ app.use('/api/customer', customerRoutes);
 app.use('/api/invoice', invoiceRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/agents', agentRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');
@@ -39,4 +42,16 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     startReminderCron();
+
+    // Start background agents if enabled
+    if (process.env.ENABLE_BACKGROUND_AGENTS !== 'false') {
+        try {
+            agentCronService.start();
+            console.log('Background agents started successfully');
+        } catch (error) {
+            console.error('Failed to start background agents:', error.message);
+        }
+    } else {
+        console.log('Background agents disabled (ENABLE_BACKGROUND_AGENTS=false)');
+    }
 });
