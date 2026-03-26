@@ -6,7 +6,7 @@ import { Plus, Trash2, Send, ChevronRight, ChevronLeft, Download, Check, Edit, X
 const CreateInvoice = () => {
     const navigate = useNavigate();
     const [customer, setCustomer] = useState({ name: '', phone: '' });
-    const [items, setItems] = useState([{ name: '', qty: 1, price: 0 }]);
+    const [items, setItems] = useState([{ name: '', qty: 1, price: 0, productId: '' }]);
     const [type, setType] = useState('GST');
     const [gstPercentage, setGstPercentage] = useState(18);
     const [adjustments, setAdjustments] = useState([]);
@@ -15,10 +15,24 @@ const CreateInvoice = () => {
     const [loading, setLoading] = useState(false);
     const [whatsappStatus, setWhatsappStatus] = useState('NOT_INITIALIZED');
     const [newAdjustment, setNewAdjustment] = useState({ label: '', value: '', type: 'fixed', operation: 'add' });
+    const [products, setProducts] = useState([]);
+    const [productsLoading, setProductsLoading] = useState(false);
 
     useEffect(() => {
         fetchStatus();
+        fetchProducts();
     }, []);
+
+    const fetchProducts = async () => {
+        setProductsLoading(true);
+        try {
+            const { data } = await api.get('/product/dropdown');
+            setProducts(data);
+        } catch (err) {
+            console.error(err);
+        }
+        setProductsLoading(false);
+    };
 
     const fetchStatus = async () => {
         try {
@@ -32,12 +46,30 @@ const CreateInvoice = () => {
         }
     };
 
-    const addItem = () => setItems([...items, { name: '', qty: 1, price: 0 }]);
+    const addItem = () => setItems([...items, { name: '', qty: 1, price: 0, productId: '' }]);
     const removeItem = (index) => setItems(items.filter((_, i) => i !== index));
 
     const updateItem = (index, field, value) => {
         const newItems = [...items];
         newItems[index][field] = field === 'name' ? value : Number(value);
+        setItems(newItems);
+    };
+
+    const handleProductSelect = (index, productId) => {
+        const newItems = [...items];
+        if (!productId) {
+            // Clear if empty selection
+            newItems[index].productId = '';
+            newItems[index].name = '';
+            newItems[index].price = 0;
+        } else {
+            const selectedProduct = products.find(p => p._id === productId);
+            if (selectedProduct) {
+                newItems[index].productId = selectedProduct._id;
+                newItems[index].name = selectedProduct.name;
+                newItems[index].price = selectedProduct.price;
+            }
+        }
         setItems(newItems);
     };
 
@@ -207,6 +239,19 @@ const CreateInvoice = () => {
                 {items.map((item, index) => (
                     <div key={index} className="flex flex-col md:grid md:grid-cols-12 gap-4 bg-slate-50 p-4 rounded-lg relative border border-slate-100">
                         <div className="md:col-span-6">
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Select Product (Optional)</label>
+                            <select
+                                className="w-full p-2 border border-slate-300 rounded text-sm mb-2"
+                                value={item.productId || ''}
+                                onChange={(e) => handleProductSelect(index, e.target.value)}
+                            >
+                                <option value="">-- Choose a product --</option>
+                                {products.map(product => (
+                                    <option key={product._id} value={product._id}>
+                                        {product.name} - ₹{product.price}
+                                    </option>
+                                ))}
+                            </select>
                             <label className="block text-xs font-medium text-slate-500 mb-1">Item Name</label>
                             <input
                                 type="text"

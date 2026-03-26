@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import CreateInvoice from './pages/CreateInvoice';
 import InvoiceList from './pages/InvoiceList';
 import CustomerList from './pages/CustomerList';
+import ProductList from './pages/ProductList';
 import Settings from './pages/Settings';
 import AdminUserCreate from './pages/AdminUserCreate';
 import UserList from './pages/UserList';
@@ -65,6 +66,7 @@ const AppContent = () => {
           <Route path="/invoices" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
           <Route path="/invoices/create" element={<ProtectedRoute><CreateInvoice /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><CustomerList /></ProtectedRoute>} />
+          <Route path="/products" element={<ProtectedRoute><ProductList /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/admin/create-user" element={<AdminRoute><AdminUserCreate /></AdminRoute>} />
           <Route path="/admin/users" element={<AdminRoute><UserList /></AdminRoute>} />

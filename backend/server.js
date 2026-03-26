@@ -9,6 +9,7 @@ const customerRoutes = require('./routes/customerRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const productRoutes = require('./routes/productRoutes');
 const startReminderCron = require('./utils/reminderCron');
 const agentRoutes = require('./routes/agentRoutes');
 const agentCronService = require('./agents/agentCron');
@@ -32,6 +33,7 @@ app.use('/api/invoice', invoiceRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/agents', agentRoutes);
+app.use('/api/product', productRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');

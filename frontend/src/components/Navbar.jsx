@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, FileText, Users, Settings, LogOut, Plus, X, Menu, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Settings, LogOut, Plus, X, Menu, ShieldCheck, Package } from 'lucide-react';
 
 const Navbar = ({ isOpen, toggleSidebar }) => {
     const { user, logout } = useAuth();
@@ -13,6 +13,7 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
         { to: '/invoices', icon: FileText, label: 'Invoices' },
         { to: '/invoices/create', icon: Plus, label: 'New Invoice' },
         { to: '/customers', icon: Users, label: 'Customers' },
+        { to: '/products', icon: Package, label: 'Products' },
     ];
 
     if (user?.role !== 'staff') {
