@@ -24,6 +24,9 @@ const Settings = () => {
     const [staff, setStaff] = useState([]);
     const [newStaff, setNewStaff] = useState({ name: '', email: '', password: '' });
     const [staffLoading, setStaffLoading] = useState(false);
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
 
     useEffect(() => {
         fetchProfile();
@@ -102,6 +105,18 @@ const Settings = () => {
     };
 
     const handleSaveProfile = async () => {
+        // Validate password match
+        if (password || confirmPassword) {
+            if (password !== confirmPassword) {
+                setPasswordError('Passwords do not match');
+                return;
+            }
+            if (password.length < 6) {
+                setPasswordError('Password must be at least 6 characters');
+                return;
+            }
+        }
+        setPasswordError('');
         setLoading(true);
         try {
             const updateData = {
@@ -118,8 +133,16 @@ const Settings = () => {
             updateData.businessPhone = profile.businessPhone;
             updateData.logo = profile.logo;
 
+            // Include password if provided
+            if (password) {
+                updateData.password = password;
+            }
+
             await api.put('/auth/profile', updateData);
             alert('Settings updated successfully!');
+            // Clear password fields after successful save
+            setPassword('');
+            setConfirmPassword('');
         } catch (err) {
             console.error(err);
             alert('Failed to update settings');
@@ -305,6 +328,35 @@ const Settings = () => {
                                         value={profile.email}
                                         onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                                     />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">New Password (leave blank to keep same)</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            setPasswordError('');
+                                        }}
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Confirm New Password</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="••••••••"
+                                        value={confirmPassword}
+                                        onChange={(e) => {
+                                            setConfirmPassword(e.target.value);
+                                            setPasswordError('');
+                                        }}
+                                    />
+                                    {passwordError && (
+                                        <p className="text-red-500 text-xs mt-2">{passwordError}</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
