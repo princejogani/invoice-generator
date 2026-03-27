@@ -1,10 +1,27 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LayoutDashboard, FileText, Users, Settings, LogOut, Plus, X, Menu, ShieldCheck, Package } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import api from '../api';
 
 const Navbar = ({ isOpen, toggleSidebar }) => {
     const { user, logout } = useAuth();
     const location = useLocation();
+    const [businessName, setBusinessName] = useState('Saras Invoicing');
+
+    useEffect(() => {
+        if (user) {
+            api.get('/auth/profile')
+                .then(({ data }) => {
+                    if (data.businessName) {
+                        setBusinessName(data.businessName);
+                    }
+                })
+                .catch(() => {
+                    // Keep default
+                });
+        }
+    }, [user]);
 
     if (!user) return null;
 
@@ -43,7 +60,7 @@ const Navbar = ({ isOpen, toggleSidebar }) => {
             <nav className={sidebarClasses}>
                 <div className="flex items-center justify-between mb-8 p-2">
                     <div className="text-2xl font-black bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent italic">
-                        Saras Invoicing
+                        {businessName}
                     </div>
                     <button onClick={toggleSidebar} className="lg:hidden text-slate-400 hover:text-white">
                         <X size={24} />

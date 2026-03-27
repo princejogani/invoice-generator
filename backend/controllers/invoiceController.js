@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const Invoice = require('../models/Invoice');
 const Customer = require('../models/Customer');
+const User = require('../models/User');
+const { sendInvoiceWhatsApp } = require('../utils/whatsappUtils');
+const { generateInvoicePDFBuffer } = require('../utils/pdfUtils');
 
 // @desc    Create a new invoice
 // @route   POST /api/invoice/create
@@ -16,7 +19,8 @@ const createInvoice = async (req, res) => {
         gstPercentage,
         adjustments,
         adjustment, // For backward compatibility
-        finalAmount
+        finalAmount,
+        isDraft = false
     } = req.body;
 
     const customerPhone = rawPhone.trim();
@@ -62,13 +66,16 @@ const createInvoice = async (req, res) => {
         gst,
         adjustments: invoiceAdjustments,
         finalAmount,
+        isDraft,
     });
 
-    // 3. Update customer stats
-    customer.totalInvoices += 1;
-    customer.totalPendingAmount += invoice.status === 'unpaid' ? finalAmount : 0;
-    customer.lastTransactionDate = Date.now();
-    await customer.save();
+    // 3. Update customer stats only for non-draft invoices
+    if (!isDraft) {
+        customer.totalInvoices += 1;
+        customer.totalPendingAmount += invoice.status === 'unpaid' ? finalAmount : 0;
+        customer.lastTransactionDate = Date.now();
+        await customer.save();
+    }
 
     res.status(201).json(invoice);
 };
@@ -80,12 +87,21 @@ const getInvoices = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const search = req.query.search || '';
+    const draft = req.query.draft;
     const skip = (page - 1) * limit;
 
     try {
         const pipeline = [
             { $match: { userId: new mongoose.Types.ObjectId(req.businessId) } }
         ];
+
+        // Filter by draft status if provided
+        if (draft !== undefined && draft !== 'all') {
+            const isDraft = draft === 'true';
+            pipeline.push({
+                $match: { isDraft: isDraft }
+            });
+        }
 
         if (search) {
             const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -264,4 +280,143 @@ const exportInvoices = async (req, res) => {
     }
 };
 
-module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices };
+// @desc    Convert draft invoice to final invoice
+// @route   PATCH /api/invoice/convert-draft
+// @access  Private
+const convertDraftToFinal = async (req, res) => {
+    const { id, sendWhatsApp = false } = req.body;
+
+    const invoice = await Invoice.findOne({ _id: id, userId: req.businessId, isDraft: true });
+
+    if (!invoice) {
+        return res.status(404).json({ message: 'Draft invoice not found' });
+    }
+
+    try {
+        // Update invoice to final
+        invoice.isDraft = false;
+        await invoice.save();
+
+        // Update customer stats (since draft invoices don't update stats)
+        const customer = await Customer.findById(invoice.customerId);
+        if (customer) {
+            customer.totalInvoices += 1;
+            customer.totalPendingAmount += invoice.status === 'unpaid' ? invoice.finalAmount : 0;
+            customer.lastTransactionDate = Date.now();
+            await customer.save();
+        }
+
+        // Send WhatsApp if requested
+        if (sendWhatsApp) {
+            try {
+                const user = await User.findById(req.businessId);
+
+                let finalMessage = user.whatsappTemplate;
+                if (!finalMessage) {
+                    finalMessage = `Hello ${invoice.customerName}, your invoice for ₹${invoice.finalAmount} is ready.`;
+                } else {
+                    finalMessage = finalMessage
+                        .replace('{{customerName}}', invoice.customerName)
+                        .replace('{{amount}}', `₹${invoice.finalAmount}`)
+                        .replace('{{businessName}}', user.name || user.businessName || '');
+                }
+
+                // Generate PDF Buffer
+                const pdfBuffer = await generateInvoicePDFBuffer(invoice, user);
+
+                // Send with PDF
+                await sendInvoiceWhatsApp(
+                    req.businessId.toString(),
+                    invoice.customerPhone,
+                    finalMessage,
+                    pdfBuffer
+                );
+
+                invoice.sentOnWhatsapp = true;
+                await invoice.save();
+            } catch (whatsappError) {
+                console.error('WhatsApp sending failed:', whatsappError);
+                // Don't fail the whole request if WhatsApp sending fails
+            }
+        }
+
+        res.json(invoice);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update invoice details
+// @route   PUT /api/invoice/update
+// @access  Private
+const updateInvoice = async (req, res) => {
+    const {
+        id,
+        customerName,
+        customerPhone: rawPhone,
+        items,
+        type,
+        subtotal,
+        gst,
+        gstPercentage,
+        adjustments,
+        finalAmount,
+        isDraft
+    } = req.body;
+
+    try {
+        const invoice = await Invoice.findOne({ _id: id, userId: req.businessId });
+
+        if (!invoice) {
+            return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // If converting from draft to final, update customer stats
+        const wasDraft = invoice.isDraft;
+        const willBeFinal = isDraft === false;
+
+        // Update invoice fields
+        if (customerName !== undefined) invoice.customerName = customerName;
+        if (rawPhone !== undefined) {
+            const customerPhone = rawPhone.trim();
+            invoice.customerPhone = customerPhone;
+
+            // Update customer if phone changed
+            if (customerPhone !== invoice.customerPhone) {
+                let customer = await Customer.findById(invoice.customerId);
+                if (customer) {
+                    customer.phone = customerPhone;
+                    if (customerName !== undefined) customer.name = customerName;
+                    await customer.save();
+                }
+            }
+        }
+        if (items !== undefined) invoice.items = items;
+        if (type !== undefined) invoice.type = type;
+        if (subtotal !== undefined) invoice.subtotal = subtotal;
+        if (gst !== undefined) invoice.gst = gst;
+        if (gstPercentage !== undefined) invoice.gstPercentage = gstPercentage;
+        if (adjustments !== undefined) invoice.adjustments = adjustments;
+        if (finalAmount !== undefined) invoice.finalAmount = finalAmount;
+        if (isDraft !== undefined) invoice.isDraft = isDraft;
+
+        await invoice.save();
+
+        // If converting from draft to final, update customer stats
+        if (wasDraft && willBeFinal) {
+            const customer = await Customer.findById(invoice.customerId);
+            if (customer) {
+                customer.totalInvoices += 1;
+                customer.totalPendingAmount += invoice.status === 'unpaid' ? invoice.finalAmount : 0;
+                customer.lastTransactionDate = Date.now();
+                await customer.save();
+            }
+        }
+
+        res.json(invoice);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices, convertDraftToFinal, updateInvoice };

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { Download, CheckCircle, XCircle, ExternalLink, Search, FileDown } from 'lucide-react';
+import { Download, CheckCircle, XCircle, ExternalLink, Search, FileDown, Check, Edit, Copy } from 'lucide-react';
 
 const InvoiceList = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const queryParams = new URLSearchParams(location.search);
     const initialSearch = queryParams.get('search') || '';
 
@@ -14,15 +15,20 @@ const InvoiceList = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
+    const [draftFilter, setDraftFilter] = useState('all'); // 'all', 'draft', 'final'
 
     useEffect(() => {
         fetchInvoices();
-    }, [page, search]);
+    }, [page, search, draftFilter]);
 
-    const fetchInvoices = async () => {
+    const fetchInvoices = useCallback(async () => {
         setLoading(true);
         try {
-            const { data } = await api.get(`/invoice/list?page=${page}&search=${search}`);
+            let url = `/invoice/list?page=${page}&search=${search}`;
+            if (draftFilter !== 'all') {
+                url += `&draft=${draftFilter === 'draft' ? 'true' : 'false'}`;
+            }
+            const { data } = await api.get(url);
             setInvoices(data.invoices);
             setTotalPages(data.pages);
             setTotalItems(data.total);
@@ -30,7 +36,7 @@ const InvoiceList = () => {
             console.error(err);
         }
         setLoading(false);
-    };
+    }, [page, search, draftFilter]);
 
     const toggleStatus = async (id, currentStatus) => {
         try {
@@ -42,6 +48,24 @@ const InvoiceList = () => {
         } catch (err) {
             console.error(err);
         }
+    };
+
+    const convertToFinal = async (id) => {
+        const sendWhatsApp = window.confirm('Do you want to send this invoice via WhatsApp after converting to final?');
+
+        try {
+            await api.patch('/invoice/convert-draft', { id, sendWhatsApp });
+            alert(`Draft converted to final invoice successfully!${sendWhatsApp ? ' WhatsApp message sent.' : ''}`);
+            fetchInvoices();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to convert draft to final invoice');
+        }
+    };
+
+    const handleEditInvoice = (invoice) => {
+        // Navigate to edit page with invoice data
+        navigate(`/invoices/edit/${invoice._id}`, { state: { invoice } });
     };
 
     const handleDownload = async (invoice) => {
@@ -59,6 +83,35 @@ const InvoiceList = () => {
         } catch (err) {
             console.error('Download failed', err);
             alert('Failed to download PDF');
+        }
+    };
+
+    const handleCloneInvoice = async (invoice) => {
+        try {
+            // Prepare clone data, excluding _id, createdAt, status, sentOnWhatsapp, etc.
+            const cloneData = {
+                customerName: invoice.customerName,
+                customerPhone: invoice.customerPhone,
+                items: invoice.items.map(item => ({
+                    name: item.name,
+                    qty: item.qty,
+                    price: item.price,
+                    productId: item.productId || ''
+                })),
+                type: invoice.type,
+                subtotal: invoice.subtotal,
+                gst: invoice.gst,
+                gstPercentage: invoice.gstPercentage,
+                adjustments: invoice.adjustments || [],
+                finalAmount: invoice.finalAmount,
+                isDraft: true // Clone as draft by default
+            };
+            await api.post('/invoice/create', cloneData);
+            alert('Invoice cloned successfully as draft!');
+            fetchInvoices(); // Refresh list
+        } catch (err) {
+            console.error('Clone failed', err);
+            alert('Failed to clone invoice');
         }
     };
 
@@ -111,6 +164,28 @@ const InvoiceList = () => {
                 </div>
             </div>
 
+            {/* Draft Filter Tabs */}
+            <div className="flex space-x-2 mb-4">
+                <button
+                    onClick={() => setDraftFilter('all')}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                >
+                    All Invoices
+                </button>
+                <button
+                    onClick={() => setDraftFilter('draft')}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'draft' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                >
+                    Drafts
+                </button>
+                <button
+                    onClick={() => setDraftFilter('final')}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'final' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                >
+                    Final Invoices
+                </button>
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -122,13 +197,14 @@ const InvoiceList = () => {
                                 <th className="p-4 text-sm font-bold text-slate-600">Type</th>
                                 <th className="p-4 text-sm font-bold text-slate-600">Date</th>
                                 <th className="p-4 text-sm font-bold text-slate-600">Status</th>
+                                <th className="p-4 text-sm font-bold text-slate-600">Draft</th>
                                 <th className="p-4 text-sm font-bold text-slate-600 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan="7" className="p-12 text-center text-slate-500">
+                                    <td colSpan="8" className="p-12 text-center text-slate-500">
                                         <div className="flex justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                         </div>
@@ -165,7 +241,36 @@ const InvoiceList = () => {
                                             <span className="capitalize">{inv.status}</span>
                                         </button>
                                     </td>
+                                    <td className="p-4">
+                                        {inv.isDraft ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-yellow-100 text-yellow-700">
+                                                Draft
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-green-100 text-green-700">
+                                                Final
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="p-4 text-right space-x-2">
+                                        {inv.isDraft && (
+                                            <>
+                                                <button
+                                                    onClick={() => handleEditInvoice(inv)}
+                                                    className="text-slate-400 hover:text-blue-600 transition p-1"
+                                                    title="Edit Draft Invoice"
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={() => convertToFinal(inv._id)}
+                                                    className="text-slate-400 hover:text-green-600 transition p-1"
+                                                    title="Convert to Final Invoice"
+                                                >
+                                                    <Check size={18} />
+                                                </button>
+                                            </>
+                                        )}
                                         <button
                                             onClick={() => handleDownload(inv)}
                                             className="text-slate-400 hover:text-blue-600 transition p-1"
@@ -174,10 +279,11 @@ const InvoiceList = () => {
                                             <Download size={18} />
                                         </button>
                                         <button
+                                            onClick={() => handleCloneInvoice(inv)}
                                             className="text-slate-400 hover:text-green-600 transition p-1"
-                                            title="View / Send"
+                                            title="Clone Invoice"
                                         >
-                                            <ExternalLink size={18} />
+                                            <Copy size={18} />
                                         </button>
                                     </td>
                                 </tr>

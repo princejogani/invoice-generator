@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
@@ -15,6 +15,7 @@ import UserList from './pages/UserList';
 import UserEdit from './pages/UserEdit';
 import CustomerPortal from './pages/CustomerPortal';
 import { Menu } from 'lucide-react';
+import api from './api';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -39,6 +40,27 @@ const AdminRoute = ({ children }) => {
 const AppContent = () => {
   const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      // Fetch profile to get business name
+      api.get('/auth/profile')
+        .then(({ data }) => {
+          if (data.businessName) {
+            document.title = `${data.businessName} | Invoicing & CRM`;
+          } else {
+            document.title = 'InvoiceSaaS | WhatsApp Automation & CRM';
+          }
+        })
+        .catch(() => {
+          // Keep default title on error
+          document.title = 'InvoiceSaaS | WhatsApp Automation & CRM';
+        });
+    } else {
+      // No user logged in, set default title
+      document.title = 'InvoiceSaaS | WhatsApp Automation & CRM';
+    }
+  }, [user]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -65,6 +87,7 @@ const AppContent = () => {
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
           <Route path="/invoices/create" element={<ProtectedRoute><CreateInvoice /></ProtectedRoute>} />
+          <Route path="/invoices/edit/:id" element={<ProtectedRoute><CreateInvoice /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><CustomerList /></ProtectedRoute>} />
           <Route path="/products" element={<ProtectedRoute><ProductList /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

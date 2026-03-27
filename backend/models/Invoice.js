@@ -26,6 +26,7 @@ const InvoiceSchema = new mongoose.Schema({
     ],
     finalAmount: { type: Number, required: true },
     status: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
+    isDraft: { type: Boolean, default: false },
     sentOnWhatsapp: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });

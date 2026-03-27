@@ -1,6 +1,6 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Package, Search, Plus, Edit, Trash2, DollarSign, Tag, Grid } from 'lucide-react';
+import { Package, Search, Plus, Edit, Trash2, Tag, Grid } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const ProductList = () => {
@@ -315,7 +315,6 @@ const ProductList = () => {
                                     <div className="flex justify-between">
                                         <span className="text-slate-500">Price</span>
                                         <span className="font-bold text-slate-800 flex items-center">
-                                            <DollarSign size={14} className="mr-1" />
                                             ₹{product.price.toLocaleString()}
                                         </span>
                                     </div>

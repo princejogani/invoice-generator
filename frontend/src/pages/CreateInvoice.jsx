@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Send, ChevronRight, ChevronLeft, Download, Check, Edit, X } from 'lucide-react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Plus, Trash2, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 
 const CreateInvoice = () => {
     const navigate = useNavigate();
+    const { id } = useParams();
+    const location = useLocation();
+    const isEditMode = !!id;
+
     const [customer, setCustomer] = useState({ name: '', phone: '' });
     const [items, setItems] = useState([{ name: '', qty: 1, price: 0, productId: '' }]);
     const [type, setType] = useState('GST');
@@ -16,22 +20,109 @@ const CreateInvoice = () => {
     const [whatsappStatus, setWhatsappStatus] = useState('NOT_INITIALIZED');
     const [newAdjustment, setNewAdjustment] = useState({ label: '', value: '', type: 'fixed', operation: 'add' });
     const [products, setProducts] = useState([]);
-    const [productsLoading, setProductsLoading] = useState(false);
+    const [customerOptions, setCustomerOptions] = useState([]);
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const [loadingCustomers, setLoadingCustomers] = useState(false);
 
     useEffect(() => {
         fetchStatus();
         fetchProducts();
-    }, []);
+
+        // Load invoice data if in edit mode
+        if (isEditMode) {
+            loadInvoiceData();
+        }
+    }, [isEditMode]);
+
+    const loadInvoiceData = useCallback(async () => {
+        try {
+            // First check if we have invoice data in location state (from InvoiceList)
+            if (location.state?.invoice) {
+                const invoice = location.state.invoice;
+                populateFormWithInvoice(invoice);
+            } else {
+                // Otherwise fetch from API
+                const { data } = await api.get(`/invoice/list?id=${id}`);
+                if (data.invoices && data.invoices.length > 0) {
+                    const invoice = data.invoices[0];
+                    populateFormWithInvoice(invoice);
+                } else {
+                    alert('Invoice not found');
+                    navigate('/invoices');
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load invoice:', err);
+            alert('Failed to load invoice data');
+            navigate('/invoices');
+        }
+    }, [id, location.state, navigate]);
+
+    const populateFormWithInvoice = (invoice) => {
+        setCustomer({
+            name: invoice.customerName || '',
+            phone: invoice.customerPhone || ''
+        });
+        setItems(invoice.items?.map(item => ({
+            name: item.name || '',
+            qty: item.qty || 1,
+            price: item.price || 0,
+            productId: item.productId || ''
+        })) || [{ name: '', qty: 1, price: 0, productId: '' }]);
+        setType(invoice.type || 'GST');
+        setGstPercentage(invoice.gstPercentage || 18);
+        setAdjustments(invoice.adjustments || []);
+        // Note: sendWhatsApp is not restored from invoice
+    };
 
     const fetchProducts = async () => {
-        setProductsLoading(true);
         try {
             const { data } = await api.get('/product/dropdown');
             setProducts(data);
         } catch (err) {
             console.error(err);
         }
-        setProductsLoading(false);
+    };
+
+    const searchTimeoutRef = useRef(null);
+
+    const fetchCustomers = async (searchTerm) => {
+        if (!searchTerm.trim()) {
+            setCustomerOptions([]);
+            setShowCustomerDropdown(false);
+            return;
+        }
+        setLoadingCustomers(true);
+        try {
+            const { data } = await api.get(`/customer/list?search=${encodeURIComponent(searchTerm)}&limit=10`);
+            setCustomerOptions(data.customers || []);
+            setShowCustomerDropdown(true);
+        } catch (err) {
+            console.error(err);
+            setCustomerOptions([]);
+        } finally {
+            setLoadingCustomers(false);
+        }
+    };
+
+    const handleCustomerNameChange = (value) => {
+        setCustomer({ ...customer, name: value });
+        // Debounce search
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+        searchTimeoutRef.current = setTimeout(() => {
+            fetchCustomers(value);
+        }, 300);
+    };
+
+    const handleCustomerSelect = (selectedCustomer) => {
+        setCustomer({
+            name: selectedCustomer.name,
+            phone: selectedCustomer.phone
+        });
+        setCustomerOptions([]);
+        setShowCustomerDropdown(false);
     };
 
     const fetchStatus = async () => {
@@ -97,16 +188,6 @@ const CreateInvoice = () => {
         setNewAdjustment({ label: '', value: '', type: 'fixed', operation: 'add' });
     };
 
-    const updateAdjustment = (index, field, value) => {
-        const newAdjustments = [...adjustments];
-        if (field === 'value') {
-            newAdjustments[index][field] = value === '' ? '' : Number(value);
-        } else {
-            newAdjustments[index][field] = value;
-        }
-        setAdjustments(newAdjustments);
-    };
-
     const removeAdjustment = (index) => {
         setAdjustments(adjustments.filter((_, i) => i !== index));
     };
@@ -133,32 +214,67 @@ const CreateInvoice = () => {
 
     const total = subtotal + gst + totalAdjustments;
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (saveAsDraft = false) => {
         setLoading(true);
         try {
-            const { data } = await api.post('/invoice/create', {
-                customerName: customer.name,
-                customerPhone: customer.phone,
-                items,
-                type,
-                subtotal,
-                gstPercentage,
-                gst,
-                adjustments,
-                finalAmount: total
-            });
-
-            if (sendWhatsApp) {
-                // Fetch template first (optional, but better to use stored one on backend)
-                await api.post('/whatsapp/send-invoice', {
-                    invoiceId: data._id
+            if (isEditMode) {
+                // Update existing invoice
+                await api.put('/invoice/update', {
+                    id,
+                    customerName: customer.name,
+                    customerPhone: customer.phone,
+                    items,
+                    type,
+                    subtotal,
+                    gstPercentage,
+                    gst,
+                    adjustments,
+                    finalAmount: total,
+                    isDraft: saveAsDraft
                 });
-            }
 
-            navigate('/invoices');
+                // Send WhatsApp if converting from draft to final and WhatsApp is enabled
+                if (sendWhatsApp && !saveAsDraft) {
+                    await api.post('/whatsapp/send-invoice', {
+                        invoiceId: id
+                    });
+                }
+
+                alert('Invoice updated successfully!');
+                navigate('/invoices?draft=' + (saveAsDraft ? 'true' : 'false'));
+            } else {
+                // Create new invoice
+                const { data } = await api.post('/invoice/create', {
+                    customerName: customer.name,
+                    customerPhone: customer.phone,
+                    items,
+                    type,
+                    subtotal,
+                    gstPercentage,
+                    gst,
+                    adjustments,
+                    finalAmount: total,
+                    isDraft: saveAsDraft
+                });
+
+                // Don't send WhatsApp for draft invoices
+                if (sendWhatsApp && !saveAsDraft) {
+                    // Fetch template first (optional, but better to use stored one on backend)
+                    await api.post('/whatsapp/send-invoice', {
+                        invoiceId: data._id
+                    });
+                }
+
+                if (saveAsDraft) {
+                    alert('Invoice saved as draft successfully!');
+                    navigate('/invoices?draft=true');
+                } else {
+                    navigate('/invoices');
+                }
+            }
         } catch (err) {
             console.error(err);
-            alert('Failed to create invoice');
+            alert(isEditMode ? 'Failed to update invoice' : 'Failed to create invoice');
         }
         setLoading(false);
     };
@@ -167,15 +283,42 @@ const CreateInvoice = () => {
         <div className="space-y-6 md:space-y-8 bg-white p-4 md:p-8 rounded-xl shadow-sm border border-slate-200">
             {/* Customer Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                <div>
+                <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name</label>
                     <input
                         type="text"
                         className="w-full p-2 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
                         value={customer.name}
-                        onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                        onChange={(e) => handleCustomerNameChange(e.target.value)}
+                        onFocus={() => {
+                            if (customer.name.trim()) {
+                                fetchCustomers(customer.name);
+                            }
+                        }}
+                        onBlur={() => {
+                            // Hide dropdown after a short delay to allow click selection
+                            setTimeout(() => setShowCustomerDropdown(false), 200);
+                        }}
                         required
                     />
+                    {showCustomerDropdown && customerOptions.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {loadingCustomers ? (
+                                <div className="p-2 text-sm text-slate-500">Loading...</div>
+                            ) : (
+                                customerOptions.map((cust) => (
+                                    <div
+                                        key={cust._id}
+                                        className="p-2 hover:bg-slate-100 cursor-pointer border-b border-slate-100 last:border-b-0"
+                                        onMouseDown={() => handleCustomerSelect(cust)}
+                                    >
+                                        <div className="font-medium text-slate-800">{cust.name}</div>
+                                        <div className="text-xs text-slate-500">{cust.phone}</div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Customer Phone</label>
@@ -564,9 +707,23 @@ const CreateInvoice = () => {
                     )}
                 </div>
 
-                <div className="flex space-x-4 w-full md:w-auto">
+                <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 w-full md:w-auto">
                     <button
-                        onClick={handleSubmit}
+                        onClick={() => handleSubmit(true)}
+                        disabled={loading}
+                        className="flex-1 md:flex-none flex items-center justify-center space-x-2 bg-slate-600 text-white px-10 py-4 rounded-xl font-bold hover:bg-slate-700 transition shadow-xl disabled:bg-slate-400"
+                    >
+                        {loading ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        ) : (
+                            <>
+                                <Check size={20} />
+                                <span>{isEditMode ? 'Update as Draft' : 'Save as Draft'}</span>
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => handleSubmit(false)}
                         disabled={loading}
                         className="flex-1 md:flex-none flex items-center justify-center space-x-2 bg-blue-600 text-white px-10 py-4 rounded-xl font-bold hover:bg-blue-700 transition shadow-xl disabled:bg-slate-400"
                     >
@@ -575,7 +732,7 @@ const CreateInvoice = () => {
                         ) : (
                             <>
                                 <Check size={20} />
-                                <span>Confirm & Generate</span>
+                                <span>{isEditMode ? 'Update Invoice' : 'Confirm & Generate'}</span>
                             </>
                         )}
                     </button>
@@ -597,7 +754,7 @@ const CreateInvoice = () => {
             </div>
 
             <h1 className="text-3xl md:text-4xl font-black text-slate-800 mb-8 tracking-tight">
-                {showPreview ? 'Final Preview' : 'Invoice Details'}
+                {isEditMode ? (showPreview ? 'Update Invoice - Preview' : 'Edit Invoice') : (showPreview ? 'Final Preview' : 'Invoice Details')}
             </h1>
 
             {showPreview ? renderPreview() : renderForm()}

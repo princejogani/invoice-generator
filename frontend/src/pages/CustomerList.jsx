@@ -1,8 +1,7 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Calendar, Search, Share2 } from 'lucide-react';
-import { useState } from 'react';
-import { useEffect } from 'react';
+import { User, Phone, Calendar, Search, Share2, Edit } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
 const CustomerList = () => {
     const navigate = useNavigate();
@@ -12,12 +11,17 @@ const CustomerList = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
+    const [editingCustomer, setEditingCustomer] = useState(null);
+    const [editName, setEditName] = useState('');
+    const [editPhone, setEditPhone] = useState('');
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState('');
 
     useEffect(() => {
         fetchCustomers();
     }, [page, search]);
 
-    const fetchCustomers = async () => {
+    const fetchCustomers = useCallback(async () => {
         setLoading(true);
         try {
             const { data } = await api.get(`/customer/list?page=${page}&search=${search}`);
@@ -28,13 +32,99 @@ const CustomerList = () => {
             console.error(err);
         }
         setLoading(false);
-    };
+    }, [page, search]);
 
     const copyPortalLink = (customer) => {
-        const token = customer.portalToken || '';
-        const link = `${window.location.origin}/p/${token}`;
-        navigator.clipboard.writeText(link);
-        alert('Historical portal link copied to clipboard!');
+        if (!customer?.portalToken) {
+            alert('No portal token found for this customer');
+            return;
+        }
+        const token = customer.portalToken;
+        const link = `${window.location?.origin}/p/${token}`;
+
+        // Use modern Clipboard API if available
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link)
+                .then(() => {
+                    alert('Historical portal link copied to clipboard!');
+                })
+                .catch((err) => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopyToClipboard(link);
+                });
+        } else {
+            fallbackCopyToClipboard(link);
+        }
+    };
+
+    const fallbackCopyToClipboard = (text) => {
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // For mobile devices
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                alert('Historical portal link copied to clipboard!');
+            } else {
+                alert('Failed to copy link. Please copy manually: ' + text);
+            }
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+            alert('Failed to copy link. Please copy manually: ' + text);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    };
+
+    const handleEditClick = (customer) => {
+        setEditingCustomer(customer);
+        setEditName(customer.name);
+        setEditPhone(customer.phone);
+        setEditError('');
+    };
+
+    const handleCloseEdit = () => {
+        setEditingCustomer(null);
+        setEditName('');
+        setEditPhone('');
+        setEditError('');
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editName.trim() || !editPhone.trim()) {
+            setEditError('Name and phone are required');
+            return;
+        }
+
+        setEditLoading(true);
+        setEditError('');
+        try {
+            await api.put(`/customer/${editingCustomer._id}`, {
+                name: editName.trim(),
+                phone: editPhone.trim()
+            });
+
+            // Update the customer in the local state
+            setCustomers(customers.map(cust =>
+                cust._id === editingCustomer._id
+                    ? { ...cust, name: editName.trim(), phone: editPhone.trim() }
+                    : cust
+            ));
+
+            alert('Customer updated successfully!');
+            handleCloseEdit();
+        } catch (err) {
+            console.error('Update failed:', err);
+            setEditError(err.response?.data?.message || 'Failed to update customer');
+        } finally {
+            setEditLoading(false);
+        }
     };
 
     return (
@@ -101,6 +191,13 @@ const CustomerList = () => {
                                         View History
                                     </button>
                                     <button
+                                        onClick={() => handleEditClick(customer)}
+                                        className="bg-amber-50 text-amber-600 px-3 py-2 rounded font-medium hover:bg-amber-100 transition border border-amber-100"
+                                        title="Edit Customer"
+                                    >
+                                        <Edit size={18} />
+                                    </button>
+                                    <button
                                         onClick={() => copyPortalLink(customer)}
                                         className="bg-blue-50 text-blue-600 px-3 py-2 rounded font-medium hover:bg-blue-100 transition border border-blue-100"
                                         title="Copy Portal Link"
@@ -145,6 +242,69 @@ const CustomerList = () => {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Edit Customer Modal */}
+            {editingCustomer && (
+                <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }} className="fixed inset-0 bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                        <div className="p-6">
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">Edit Customer</h3>
+                            <p className="text-slate-500 mb-6">Update customer name and phone number</p>
+
+                            {editError && (
+                                <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                                    {editError}
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        Customer Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        placeholder="Enter customer name"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        Phone Number
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={editPhone}
+                                        onChange={(e) => setEditPhone(e.target.value)}
+                                        placeholder="Enter phone number"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-8">
+                                <button
+                                    onClick={handleCloseEdit}
+                                    className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition"
+                                    disabled={editLoading}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveEdit}
+                                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                                    disabled={editLoading}
+                                >
+                                    {editLoading ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
