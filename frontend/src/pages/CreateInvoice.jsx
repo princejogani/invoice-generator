@@ -10,7 +10,7 @@ const CreateInvoice = () => {
     const isEditMode = !!id;
 
     const [customer, setCustomer] = useState({ name: '', phone: '' });
-    const [items, setItems] = useState([{ name: '', qty: 1, price: 0, productId: '' }]);
+    const [items, setItems] = useState([{ name: '', qty: 1, price: 0, productId: '', gst: 0 }]);
     const [type, setType] = useState('GST');
     const [gstPercentage, setGstPercentage] = useState(18);
     const [adjustments, setAdjustments] = useState([]);
@@ -67,8 +67,9 @@ const CreateInvoice = () => {
             name: item.name || '',
             qty: item.qty || 1,
             price: item.price || 0,
-            productId: item.productId || ''
-        })) || [{ name: '', qty: 1, price: 0, productId: '' }]);
+            productId: item.productId || '',
+            gst: item.gst ?? 0
+        })) || [{ name: '', qty: 1, price: 0, productId: '', gst: 0 }]);
         setType(invoice.type || 'GST');
         setGstPercentage(invoice.gstPercentage || 18);
         setAdjustments(invoice.adjustments || []);
@@ -137,32 +138,48 @@ const CreateInvoice = () => {
         }
     };
 
-    const addItem = () => setItems([...items, { name: '', qty: 1, price: 0, productId: '' }]);
+    const addItem = () => setItems([...items, { name: '', qty: 1, price: 0, productId: '', gst: type === 'GST' ? gstPercentage : 0 }]);
     const removeItem = (index) => setItems(items.filter((_, i) => i !== index));
 
     const updateItem = (index, field, value) => {
         const newItems = [...items];
-        newItems[index][field] = field === 'name' ? value : Number(value);
+        if (field === 'name') {
+            newItems[index].name = value;
+            // If manually typing name (no product selected), use global gstPercentage
+            if (!newItems[index].productId) {
+                newItems[index].gst = type === 'GST' ? gstPercentage : 0;
+            }
+        } else {
+            newItems[index][field] = Number(value);
+        }
         setItems(newItems);
     };
 
     const handleProductSelect = (index, productId) => {
         const newItems = [...items];
         if (!productId) {
-            // Clear if empty selection
             newItems[index].productId = '';
             newItems[index].name = '';
             newItems[index].price = 0;
+            newItems[index].gst = type === 'GST' ? gstPercentage : 0;
         } else {
             const selectedProduct = products.find(p => p._id === productId);
             if (selectedProduct) {
                 newItems[index].productId = selectedProduct._id;
                 newItems[index].name = selectedProduct.name;
                 newItems[index].price = selectedProduct.price;
+                newItems[index].gst = type === 'GST' ? (selectedProduct.taxRate ?? 0) : 0;
             }
         }
         setItems(newItems);
     };
+
+    // Sync item GST when invoice type changes
+    useEffect(() => {
+        if (type !== 'GST') {
+            setItems(prev => prev.map(item => ({ ...item, gst: 0 })));
+        }
+    }, [type]);
 
     // Adjustment management functions
     const addAdjustment = () => {
@@ -193,7 +210,9 @@ const CreateInvoice = () => {
     };
 
     const subtotal = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
-    const gst = type === 'GST' ? (subtotal * gstPercentage) / 100 : 0;
+    const gst = type === 'GST'
+        ? items.reduce((sum, item) => sum + (item.qty * item.price * (item.gst ?? 0)) / 100, 0)
+        : 0;
 
     // Calculate total adjustments
     let totalAdjustments = 0;
@@ -280,6 +299,7 @@ const CreateInvoice = () => {
     };
 
     const renderForm = () => (
+        <>
         <div className="space-y-6 md:space-y-8 bg-white p-4 md:p-8 rounded-xl shadow-sm border border-slate-200">
             {/* Customer Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -353,12 +373,13 @@ const CreateInvoice = () => {
                     </div>
                 </div>
                 {type === 'GST' && (
-                    <div className="w-full md:w-32">
-                        <label className="block text-xs font-medium text-slate-500 mb-1">GST %</label>
+                    <div className="w-full md:w-40">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Default GST % <span className="text-slate-400">(for manual items)</span></label>
                         <input
                             type="number"
                             className="w-full p-2 border border-slate-300 rounded text-sm font-bold"
                             value={gstPercentage}
+                            min="0"
                             onChange={(e) => setGstPercentage(Number(e.target.value))}
                         />
                     </div>
@@ -416,7 +437,7 @@ const CreateInvoice = () => {
                                     required
                                 />
                             </div>
-                            <div className="flex-1 md:col-span-3">
+                            <div className="flex-1 md:col-span-2">
                                 <label className="block text-xs font-medium text-slate-500 mb-1">Price</label>
                                 <input
                                     type="number"
@@ -426,6 +447,18 @@ const CreateInvoice = () => {
                                     required
                                 />
                             </div>
+                            {type === 'GST' && (
+                                <div className="flex-1 md:col-span-1">
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">GST %</label>
+                                    <input
+                                        type="number"
+                                        className="w-full p-2 border border-slate-300 rounded text-sm"
+                                        value={item.gst ?? 0}
+                                        min="0"
+                                        onChange={(e) => updateItem(index, 'gst', e.target.value)}
+                                    />
+                                </div>
+                            )}
                             <div className="flex items-end md:col-span-1 md:pb-2">
                                 <button
                                     type="button"
@@ -439,6 +472,7 @@ const CreateInvoice = () => {
                         </div>
                     </div>
                 ))}
+            </div>
             </div>
 
             {/* Adjustments & Total */}
@@ -542,12 +576,12 @@ const CreateInvoice = () => {
                         <span>Subtotal:</span>
                         <span className="font-bold text-slate-800">₹{subtotal.toLocaleString()}</span>
                     </div>
-                    {type === 'GST' && (
-                        <div className="flex justify-between text-slate-600">
-                            <span>GST ({gstPercentage}%):</span>
-                            <span className="font-bold text-slate-800">₹{gst.toLocaleString()}</span>
-                        </div>
-                    )}
+                {type === 'GST' && (
+                    <div className="flex justify-between text-slate-600">
+                        <span>GST (per item):</span>
+                        <span className="font-bold text-slate-800">₹{gst.toLocaleString()}</span>
+                    </div>
+                )}
                     {adjustments.map((adj, index) => {
                         let amount = 0;
                         if (adj.type === 'percent') {
@@ -591,7 +625,7 @@ const CreateInvoice = () => {
                     <ChevronRight size={20} />
                 </button>
             </div>
-        </div>
+        </>
     );
 
     const renderPreview = () => (
@@ -652,7 +686,7 @@ const CreateInvoice = () => {
                         </div>
                         {type === 'GST' && (
                             <div className="flex justify-between text-slate-500 text-sm">
-                                <span>GST ({gstPercentage}%)</span>
+                                <span>GST (per item)</span>
                                 <span className="font-bold text-slate-800">₹{gst.toLocaleString()}</span>
                             </div>
                         )}

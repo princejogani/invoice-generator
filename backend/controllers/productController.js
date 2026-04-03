@@ -118,7 +118,7 @@ const deleteProduct = async (req, res) => {
 const getProductDropdown = async (req, res) => {
     const products = await Product.find(
         { userId: req.businessId, isActive: true },
-        { _id: 1, name: 1, price: 1, unit: 1 }
+        { _id: 1, name: 1, price: 1, unit: 1, taxRate: 1 }
     ).sort({ name: 1 });
 
     res.json(products);

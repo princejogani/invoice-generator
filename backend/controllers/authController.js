@@ -61,6 +61,7 @@ const loginUser = async (req, res) => {
             email: user.email,
             role: user.role,
             whatsappTemplate: user.whatsappTemplate,
+            invoiceCustomizations: user.invoiceCustomizations,
             token: generateToken(user._id),
         });
     } else {
@@ -84,6 +85,7 @@ const getUserProfile = async (req, res) => {
                 email: currentUser.email,
                 role: currentUser.role,
                 whatsappTemplate: businessUser.whatsappTemplate,
+                invoiceCustomizations: businessUser.invoiceCustomizations,
                 businessName: businessUser.businessName,
                 tagline: businessUser.tagline,
                 gstin: businessUser.gstin,
@@ -126,6 +128,7 @@ const updateUserProfile = async (req, res) => {
             // Only update business details if the user is the owner (not staff)
             if (user.role !== 'staff') {
                 businessUser.whatsappTemplate = req.body.whatsappTemplate || businessUser.whatsappTemplate;
+                businessUser.invoiceCustomizations = req.body.invoiceCustomizations || businessUser.invoiceCustomizations;
                 businessUser.businessName = req.body.businessName || businessUser.businessName;
                 businessUser.tagline = req.body.tagline || businessUser.tagline;
                 businessUser.gstin = req.body.gstin || businessUser.gstin;
@@ -149,6 +152,7 @@ const updateUserProfile = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 whatsappTemplate: businessUser.whatsappTemplate,
+                invoiceCustomizations: businessUser.invoiceCustomizations,
                 businessName: businessUser.businessName,
                 tagline: businessUser.tagline,
                 gstin: businessUser.gstin,

@@ -1,6 +1,6 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Package, Search, Plus, Edit, Trash2, Tag, Grid } from 'lucide-react';
+import { Package, Search, Plus, Edit, Trash2, Tag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const ProductList = () => {
@@ -10,7 +10,6 @@ const ProductList = () => {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const [totalItems, setTotalItems] = useState(0);
     const [showForm, setShowForm] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [formData, setFormData] = useState({
@@ -34,7 +33,6 @@ const ProductList = () => {
             const { data } = await api.get(`/product/list?page=${page}&search=${search}`);
             setProducts(data.products);
             setTotalPages(data.pages);
-            setTotalItems(data.total);
         } catch (err) {
             console.error(err);
         }
@@ -216,13 +214,14 @@ const ProductList = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Tax Rate (%)</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">GST % <span className="text-slate-400 font-normal">(default for this product)</span></label>
                                 <input
                                     type="number"
                                     name="taxRate"
                                     step="0.1"
                                     min="0"
                                     max="100"
+                                    placeholder="e.g. 18"
                                     className="w-full p-2 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
                                     value={formData.taxRate}
                                     onChange={handleInputChange}
@@ -323,7 +322,7 @@ const ProductList = () => {
                                         <span className="font-medium text-slate-700">{product.unit}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-slate-500">Tax Rate</span>
+                                        <span className="text-slate-500">GST</span>
                                         <span className="font-medium text-slate-700">{product.taxRate}%</span>
                                     </div>
                                     {product.sku && (
