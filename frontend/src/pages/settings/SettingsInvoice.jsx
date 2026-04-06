@@ -158,7 +158,7 @@ const InvoicePreview = ({ c, profile, sections }) => {
                     marginBottom: c.sectionSpacing + 'px',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexDirection: c.logoPosition === 'center' ? 'column' : 'row' }}>
-                        {profile.logo && (
+                        {profile.logo && c.showLogo !== false && (
                             <img src={profile.logo} alt="logo" style={{ width: c.logoSize + 'px', height: c.logoSize + 'px', objectFit: 'contain', borderRadius: c.logoBorderRadius + 'px' }} />
                         )}
                         <div style={{ textAlign: c.logoPosition === 'center' ? 'center' : 'left' }}>
@@ -332,6 +332,7 @@ InvoicePreview.propTypes = {
         showGstin: PropTypes.bool,
         showCustomerAddress: PropTypes.bool,
         showThankYou: PropTypes.bool,
+        showLogo: PropTypes.bool,
         footerText: PropTypes.string,
     }).isRequired,
     profile: PropTypes.shape({
@@ -393,6 +394,7 @@ export const DEFAULT_CUSTOMIZATIONS = {
     showCustomerAddress: true,
     showThankYou: true,
     showSummaryBorders: true,
+    showLogo: true,
     // Footer
     footerText: 'Payment due within 7 days. Thank you for your business.',
 };
@@ -510,6 +512,7 @@ const SettingsInvoice = ({ profile, setProfile, onSave, loading }) => {
 
                     {/* Visibility */}
                     <Section title="Show / Hide Fields" icon={Rows}>
+                        <ToggleRow label="Logo" value={c.showLogo !== false} onChange={v => setC({ showLogo: v })} />
                         <ToggleRow label="Due Date" value={c.showDueDate} onChange={v => setC({ showDueDate: v })} />
                         <ToggleRow label="Business Address" value={c.showBusinessAddress} onChange={v => setC({ showBusinessAddress: v })} />
                         <ToggleRow label="GSTIN" value={c.showGstin} onChange={v => setC({ showGstin: v })} />

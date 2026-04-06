@@ -419,4 +419,63 @@ const updateInvoice = async (req, res) => {
     }
 };
 
-module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices, convertDraftToFinal, updateInvoice };
+// @desc    Record a payment against an invoice
+// @route   POST /api/invoice/payment
+// @access  Private
+const recordPayment = async (req, res) => {
+    const { id, amount, method } = req.body;
+    if (!id || !amount || !method) return res.status(400).json({ message: 'id, amount and method are required' });
+
+    try {
+        const invoice = await Invoice.findOne({ _id: id, userId: req.businessId });
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+        const user = req.user;
+
+        invoice.payments.push({
+            amount: Number(amount),
+            method,
+            recordedBy: user?._id,
+            recordedByName: user?.name || user?.email || 'Unknown',
+        });
+
+        invoice.paidAmount = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+
+        if (invoice.paidAmount >= invoice.finalAmount) {
+            invoice.status = 'paid';
+            invoice.paidAmount = invoice.finalAmount;
+        } else if (invoice.paidAmount > 0) {
+            invoice.status = 'partial';
+        } else {
+            invoice.status = 'unpaid';
+        }
+
+        await invoice.save();
+
+        // Update customer pending amount
+        const customer = await Customer.findById(invoice.customerId);
+        if (customer) {
+            customer.totalPendingAmount = Math.max(0, invoice.finalAmount - invoice.paidAmount);
+            await customer.save();
+        }
+
+        res.json(invoice);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get payment history for an invoice
+// @route   GET /api/invoice/:id/payments
+// @access  Private
+const getPayments = async (req, res) => {
+    try {
+        const invoice = await Invoice.findOne({ _id: req.params.id, userId: req.businessId }).select('payments paidAmount finalAmount status customerName');
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+        res.json(invoice);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices, convertDraftToFinal, updateInvoice, recordPayment, getPayments };

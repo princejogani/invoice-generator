@@ -25,7 +25,17 @@ const InvoiceSchema = new mongoose.Schema({
         }
     ],
     finalAmount: { type: Number, required: true },
-    status: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
+    status: { type: String, enum: ['paid', 'unpaid', 'partial'], default: 'unpaid' },
+    paidAmount: { type: Number, default: 0 },
+    payments: [
+        {
+            amount: { type: Number, required: true },
+            method: { type: String, enum: ['CASH', 'ONLINE'], required: true },
+            recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            recordedByName: { type: String },
+            date: { type: Date, default: Date.now },
+        }
+    ],
     isDraft: { type: Boolean, default: false },
     sentOnWhatsapp: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }

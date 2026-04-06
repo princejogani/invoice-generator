@@ -1,13 +1,312 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import PropTypes from 'prop-types';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { Download, CheckCircle, XCircle, ExternalLink, Search, FileDown, Check, Edit, Copy } from 'lucide-react';
+import {
+    Search, FileDown, Check, Edit, Copy, Download,
+    MoreVertical, CreditCard, History, X, CheckCircle, Clock, XCircle
+} from 'lucide-react';
 
+// ── Status Badge ─────────────────────────────────────────────────────────────
+const StatusBadge = ({ status, paidAmount, finalAmount }) => {
+    const cfg = {
+        paid:    { icon: <CheckCircle size={12} />, cls: 'bg-green-100 text-green-700',   label: 'Paid' },
+        partial: { icon: <Clock size={12} />,        cls: 'bg-yellow-100 text-yellow-700', label: 'Partial' },
+        unpaid:  { icon: <XCircle size={12} />,      cls: 'bg-red-100 text-red-700',       label: 'Unpaid' },
+    }[status] || { icon: <XCircle size={12} />, cls: 'bg-red-100 text-red-700', label: status };
+
+    return (
+        <div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${cfg.cls}`}>
+                {cfg.icon} {cfg.label}
+            </span>
+            {status === 'partial' && (
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                    ₹{(paidAmount || 0).toLocaleString()} / ₹{finalAmount.toLocaleString()}
+                </p>
+            )}
+        </div>
+    );
+};
+StatusBadge.propTypes = {
+    status: PropTypes.string.isRequired,
+    paidAmount: PropTypes.number,
+    finalAmount: PropTypes.number.isRequired,
+};
+StatusBadge.defaultProps = { paidAmount: 0 };
+
+// ── 3-dot Action Dropdown (portal-based to escape overflow:hidden) ────────────
+const ActionMenu = ({ inv, onDownload, onClone, onEdit, onConvert, onPayment, onHistory }) => {
+    const [open, setOpen] = useState(false);
+    const [pos, setPos] = useState({ top: 0, left: 0 });
+    const btnRef = useRef(null);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => {
+            if (
+                btnRef.current && !btnRef.current.contains(e.target) &&
+                menuRef.current && !menuRef.current.contains(e.target)
+            ) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const handleOpen = () => {
+        if (btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            const dropdownH = inv.isDraft ? 160 : 120;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const top = spaceBelow < dropdownH
+                ? rect.top - dropdownH - 4
+                : rect.bottom + 4;
+            setPos({ top, left: rect.right - 192 });
+        }
+        setOpen(v => !v);
+    };
+
+    const menuItem = (icon, label, onClick, cls = '') => (
+        <button
+            key={label}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => { setOpen(false); onClick(); }}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-slate-700 transition ${cls}`}
+        >
+            {icon} {label}
+        </button>
+    );
+
+    return (
+        <>
+            <button
+                ref={btnRef}
+                onClick={handleOpen}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition"
+            >
+                <MoreVertical size={16} />
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={menuRef}
+                    style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+                    className="w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                >
+                    {inv.isDraft && menuItem(<Edit size={13} />, 'Edit Draft', onEdit)}
+                    {inv.isDraft && menuItem(<Check size={13} />, 'Convert to Final', onConvert, 'text-green-700')}
+                    {menuItem(<Download size={13} />, 'Download PDF', onDownload)}
+                    {menuItem(<Copy size={13} />, 'Clone Invoice', onClone)}
+                    {!inv.isDraft && inv.status !== 'paid' && menuItem(<CreditCard size={13} />, 'Record Payment', onPayment, 'text-blue-700')}
+                    {!inv.isDraft && menuItem(<History size={13} />, 'Transaction History', onHistory)}
+                </div>,
+                document.body
+            )}
+        </>
+    );
+};
+ActionMenu.propTypes = {
+    inv: PropTypes.shape({
+        _id: PropTypes.string.isRequired,
+        isDraft: PropTypes.bool,
+        status: PropTypes.string,
+    }).isRequired,
+    onDownload: PropTypes.func.isRequired,
+    onClone: PropTypes.func.isRequired,
+    onEdit: PropTypes.func.isRequired,
+    onConvert: PropTypes.func.isRequired,
+    onPayment: PropTypes.func.isRequired,
+    onHistory: PropTypes.func.isRequired,
+};
+ActionMenu.defaultProps = {
+    inv: { isDraft: false, status: 'unpaid' },
+};
+
+// ── Payment Modal ─────────────────────────────────────────────────────────────
+const PaymentModal = ({ inv, onClose, onSuccess }) => {
+    const [amount, setAmount] = useState('');
+    const [method, setMethod] = useState('CASH');
+    const [receiveAll, setReceiveAll] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const remaining = inv.finalAmount - (inv.paidAmount || 0);
+
+    const handleReceiveAll = (checked) => {
+        setReceiveAll(checked);
+        if (checked) setAmount(String(remaining));
+        else setAmount('');
+        setError('');
+    };
+
+    const handleSubmit = async () => {
+        const num = Number(amount);
+        if (!num || num <= 0) return setError('Enter a valid amount');
+        if (num > remaining) return setError(`Max receivable is ₹${remaining.toLocaleString()}`);
+        setLoading(true);
+        try {
+            await api.post('/invoice/payment', { id: inv._id, amount: num, method });
+            onSuccess();
+            onClose();
+        } catch (e) {
+            setError(e.response?.data?.message || 'Failed to record payment');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Record Payment</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{inv.customerName}</p>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X size={16} /></button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="bg-slate-50 rounded-lg p-3">
+                            <p className="text-slate-500">Total Amount</p>
+                            <p className="font-bold text-slate-800 text-sm mt-0.5">₹{inv.finalAmount.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg p-3">
+                            <p className="text-slate-500">Remaining</p>
+                            <p className="font-bold text-orange-600 text-sm mt-0.5">₹{remaining.toLocaleString()}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Amount Received (₹)</label>
+                        <input
+                            type="number" value={amount}
+                            onChange={e => { setAmount(e.target.value); setReceiveAll(false); setError(''); }}
+                            placeholder={`Max ₹${remaining.toLocaleString()}`}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={receiveAll}
+                            onChange={e => handleReceiveAll(e.target.checked)}
+                            className="w-4 h-4 accent-blue-600 rounded"
+                        />
+                        <span className="text-xs text-slate-600">
+                            Receive full pending amount
+                            <span className="ml-1 font-bold text-blue-600">₹{remaining.toLocaleString()}</span>
+                        </span>
+                    </label>
+                    <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Payment Method</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['CASH', 'ONLINE'].map(m => (
+                                <button key={m} onClick={() => setMethod(m)}
+                                    className={`py-2 rounded-lg text-xs font-bold border transition ${method === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'}`}>
+                                    {m === 'CASH' ? '💵 Cash' : '📱 Online'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+                </div>
+                <div className="px-5 pb-5 flex gap-2">
+                    <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+                    <button onClick={handleSubmit} disabled={loading}
+                        className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
+                        {loading ? 'Saving...' : 'Receive Payment'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+PaymentModal.propTypes = {
+    inv: PropTypes.shape({
+        _id: PropTypes.string.isRequired,
+        customerName: PropTypes.string.isRequired,
+        finalAmount: PropTypes.number.isRequired,
+        paidAmount: PropTypes.number,
+    }).isRequired,
+    onClose: PropTypes.func.isRequired,
+    onSuccess: PropTypes.func.isRequired,
+};
+
+// ── Transaction History Modal ─────────────────────────────────────────────────
+const HistoryModal = ({ inv, onClose }) => {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get(`/invoice/${inv._id}/payments`)
+            .then(r => setData(r.data))
+            .catch(() => setData({ payments: [] }))
+            .finally(() => setLoading(false));
+    }, [inv._id]);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Transaction History</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{inv.customerName} · #{inv._id.slice(-6).toUpperCase()}</p>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X size={16} /></button>
+                </div>
+                <div className="p-5 max-h-96 overflow-y-auto">
+                    {loading ? (
+                        <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" /></div>
+                    ) : !data?.payments?.length ? (
+                        <p className="text-center text-slate-400 text-sm py-8">No payments recorded yet.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {data.payments.map((p, i) => (
+                                <div key={i} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">₹{p.amount.toLocaleString()}</p>
+                                        <p className="text-[11px] text-slate-500 mt-0.5">
+                                            {new Date(p.date).toLocaleString('en-IN')} · by {p.recordedByName || 'Unknown'}
+                                        </p>
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.method === 'CASH' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                        {p.method}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {data && (
+                        <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+                            <span>Total Paid</span>
+                            <span className="font-bold text-green-700">₹{(data.paidAmount || 0).toLocaleString()} / ₹{inv.finalAmount.toLocaleString()}</span>
+                        </div>
+                    )}
+                </div>
+                <div className="px-5 pb-5">
+                    <button onClick={onClose} className="w-full py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Close</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+HistoryModal.propTypes = {
+    inv: PropTypes.shape({
+        _id: PropTypes.string.isRequired,
+        customerName: PropTypes.string.isRequired,
+        finalAmount: PropTypes.number.isRequired,
+    }).isRequired,
+    onClose: PropTypes.func.isRequired,
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
 const InvoiceList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const queryParams = new URLSearchParams(location.search);
-    const initialSearch = queryParams.get('search') || '';
+    const initialSearch = new URLSearchParams(location.search).get('search') || '';
 
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -15,104 +314,58 @@ const InvoiceList = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
-    const [draftFilter, setDraftFilter] = useState('all'); // 'all', 'draft', 'final'
-
-    useEffect(() => {
-        fetchInvoices();
-    }, [page, search, draftFilter]);
+    const [draftFilter, setDraftFilter] = useState('all');
+    const [paymentModal, setPaymentModal] = useState(null);
+    const [historyModal, setHistoryModal] = useState(null);
 
     const fetchInvoices = useCallback(async () => {
         setLoading(true);
         try {
             let url = `/invoice/list?page=${page}&search=${search}`;
-            if (draftFilter !== 'all') {
-                url += `&draft=${draftFilter === 'draft' ? 'true' : 'false'}`;
-            }
+            if (draftFilter !== 'all') url += `&draft=${draftFilter === 'draft' ? 'true' : 'false'}`;
             const { data } = await api.get(url);
             setInvoices(data.invoices);
             setTotalPages(data.pages);
             setTotalItems(data.total);
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
         setLoading(false);
     }, [page, search, draftFilter]);
 
-    const toggleStatus = async (id, currentStatus) => {
-        try {
-            await api.patch('/invoice/status', {
-                id,
-                status: currentStatus === 'paid' ? 'unpaid' : 'paid'
-            });
-            fetchInvoices();
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
     const convertToFinal = async (id) => {
-        const sendWhatsApp = window.confirm('Do you want to send this invoice via WhatsApp after converting to final?');
-
+        const sendWhatsApp = window.confirm('Send this invoice via WhatsApp after converting?');
         try {
             await api.patch('/invoice/convert-draft', { id, sendWhatsApp });
-            alert(`Draft converted to final invoice successfully!${sendWhatsApp ? ' WhatsApp message sent.' : ''}`);
             fetchInvoices();
-        } catch (err) {
-            console.error(err);
-            alert('Failed to convert draft to final invoice');
-        }
+        } catch { alert('Failed to convert draft'); }
     };
 
-    const handleEditInvoice = (invoice) => {
-        // Navigate to edit page with invoice data
-        navigate(`/invoices/edit/${invoice._id}`, { state: { invoice } });
-    };
-
-    const handleDownload = async (invoice) => {
+    const handleDownload = async (inv) => {
         try {
-            const response = await api.get(`/whatsapp/download/${invoice._id}`, {
-                responseType: 'blob'
-            });
+            const response = await api.get(`/whatsapp/download/${inv._id}`, { responseType: 'blob' });
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `Invoice-${invoice._id.slice(-6)}.pdf`);
+            link.setAttribute('download', `Invoice-${inv._id.slice(-6)}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } catch (err) {
-            console.error('Download failed', err);
-            alert('Failed to download PDF');
-        }
+        } catch { alert('Failed to download PDF'); }
     };
 
-    const handleCloneInvoice = async (invoice) => {
+    const handleClone = async (inv) => {
         try {
-            // Prepare clone data, excluding _id, createdAt, status, sentOnWhatsapp, etc.
-            const cloneData = {
-                customerName: invoice.customerName,
-                customerPhone: invoice.customerPhone,
-                items: invoice.items.map(item => ({
-                    name: item.name,
-                    qty: item.qty,
-                    price: item.price,
-                    productId: item.productId || ''
-                })),
-                type: invoice.type,
-                subtotal: invoice.subtotal,
-                gst: invoice.gst,
-                gstPercentage: invoice.gstPercentage,
-                adjustments: invoice.adjustments || [],
-                finalAmount: invoice.finalAmount,
-                isDraft: true // Clone as draft by default
-            };
-            await api.post('/invoice/create', cloneData);
-            alert('Invoice cloned successfully as draft!');
-            fetchInvoices(); // Refresh list
-        } catch (err) {
-            console.error('Clone failed', err);
-            alert('Failed to clone invoice');
-        }
+            await api.post('/invoice/create', {
+                customerName: inv.customerName, customerPhone: inv.customerPhone,
+                items: inv.items.map(({ name, qty, price, productId }) => ({ name, qty, price, productId: productId || '' })),
+                type: inv.type, subtotal: inv.subtotal, gst: inv.gst,
+                gstPercentage: inv.gstPercentage, adjustments: inv.adjustments || [],
+                finalAmount: inv.finalAmount, isDraft: true,
+            });
+            alert('Invoice cloned as draft!');
+            fetchInvoices();
+        } catch { alert('Failed to clone invoice'); }
     };
 
     const handleExportCSV = async () => {
@@ -125,92 +378,65 @@ const InvoiceList = () => {
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } catch (err) {
-            console.error('Export failed', err);
-            alert('Failed to export report');
-        }
+        } catch { alert('Failed to export report'); }
     };
 
     return (
         <div className="p-4 md:p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Invoices</h1>
-
-                <div className="flex flex-col md:flex-row w-full md:w-auto gap-4">
+                <div className="flex flex-col md:flex-row w-full md:w-auto gap-3">
                     <div className="relative w-full md:w-64">
                         <input
-                            type="text"
-                            placeholder="Search customer name..."
-                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            type="text" placeholder="Search customer..."
+                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                             value={search}
-                            onChange={(e) => {
-                                setSearch(e.target.value);
-                                setPage(1);
-                            }}
+                            onChange={e => { setSearch(e.target.value); setPage(1); }}
                         />
-                        <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                        <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                     </div>
-                    <button
-                        onClick={handleExportCSV}
-                        className="flex items-center justify-center space-x-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-bold hover:bg-slate-200 border border-slate-200 transition text-center"
-                    >
-                        <FileDown size={18} />
-                        <span className="hidden md:inline">Export Report</span>
-                        <span className="md:hidden">Export</span>
+                    <button onClick={handleExportCSV} className="flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-bold hover:bg-slate-200 border border-slate-200 transition text-sm">
+                        <FileDown size={16} /> Export
                     </button>
-                    <Link to="/invoices/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition text-center flex items-center justify-center">
+                    <Link to="/invoices/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition text-sm text-center">
                         + New Invoice
                     </Link>
                 </div>
             </div>
 
-            {/* Draft Filter Tabs */}
+            {/* Filter Tabs */}
             <div className="flex space-x-2 mb-4">
-                <button
-                    onClick={() => setDraftFilter('all')}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                    All Invoices
-                </button>
-                <button
-                    onClick={() => setDraftFilter('draft')}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'draft' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                    Drafts
-                </button>
-                <button
-                    onClick={() => setDraftFilter('final')}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === 'final' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                    Final Invoices
-                </button>
+                {['all', 'draft', 'final'].map(f => (
+                    <button key={f} onClick={() => setDraftFilter(f)}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm ${draftFilter === f ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                        {f === 'all' ? 'All Invoices' : f === 'draft' ? 'Drafts' : 'Final'}
+                    </button>
+                ))}
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Table — no overflow-hidden so portal dropdown isn't clipped */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="p-4 text-sm font-bold text-slate-600">ID</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Customer</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Amount</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Type</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Date</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Status</th>
-                                <th className="p-4 text-sm font-bold text-slate-600">Draft</th>
-                                <th className="p-4 text-sm font-bold text-slate-600 text-right">Actions</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">ID</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Customer</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Amount</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Type</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Date</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Status</th>
+                                <th className="p-4 text-xs font-bold text-slate-600">Draft</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
-                                <tr>
-                                    <td colSpan="8" className="p-12 text-center text-slate-500">
-                                        <div className="flex justify-center">
-                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : invoices.map((inv) => (
+                                <tr><td colSpan="8" className="p-12 text-center">
+                                    <div className="flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+                                </td></tr>
+                            ) : invoices.map(inv => (
                                 <tr key={inv._id} className="hover:bg-slate-50 transition">
                                     <td className="p-4 text-sm text-slate-500 font-mono">#{inv._id.slice(-6).toUpperCase()}</td>
                                     <td className="p-4">
@@ -219,72 +445,32 @@ const InvoiceList = () => {
                                     </td>
                                     <td className="p-4 font-bold text-slate-800 text-sm">₹{inv.finalAmount.toLocaleString()}</td>
                                     <td className="p-4">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${inv.type?.toLowerCase() === 'gst' ? 'bg-blue-100 text-blue-700' :
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${
+                                            inv.type?.toLowerCase() === 'gst' ? 'bg-blue-100 text-blue-700' :
                                             inv.type?.toLowerCase() === 'estimate' ? 'bg-purple-100 text-purple-700' :
-                                                'bg-slate-100 text-slate-600'
-                                            }`}>
+                                            'bg-slate-100 text-slate-600'}`}>
                                             {inv.type}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-sm text-slate-500">
-                                        {new Date(inv.createdAt).toLocaleDateString()}
+                                    <td className="p-4 text-sm text-slate-500">{new Date(inv.createdAt).toLocaleDateString()}</td>
+                                    <td className="p-4">
+                                        <StatusBadge status={inv.status} paidAmount={inv.paidAmount} finalAmount={inv.finalAmount} />
                                     </td>
                                     <td className="p-4">
-                                        <button
-                                            onClick={() => toggleStatus(inv._id, inv.status)}
-                                            className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-bold transition ${inv.status === 'paid'
-                                                ? 'bg-green-100 text-green-700'
-                                                : 'bg-orange-100 text-orange-700'
-                                                }`}
-                                        >
-                                            {inv.status === 'paid' ? <CheckCircle size={14} /> : <XCircle size={14} />}
-                                            <span className="capitalize">{inv.status}</span>
-                                        </button>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${inv.isDraft ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                            {inv.isDraft ? 'Draft' : 'Final'}
+                                        </span>
                                     </td>
-                                    <td className="p-4">
-                                        {inv.isDraft ? (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-yellow-100 text-yellow-700">
-                                                Draft
-                                            </span>
-                                        ) : (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-green-100 text-green-700">
-                                                Final
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="p-4 text-right space-x-2">
-                                        {inv.isDraft && (
-                                            <>
-                                                <button
-                                                    onClick={() => handleEditInvoice(inv)}
-                                                    className="text-slate-400 hover:text-blue-600 transition p-1"
-                                                    title="Edit Draft Invoice"
-                                                >
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => convertToFinal(inv._id)}
-                                                    className="text-slate-400 hover:text-green-600 transition p-1"
-                                                    title="Convert to Final Invoice"
-                                                >
-                                                    <Check size={18} />
-                                                </button>
-                                            </>
-                                        )}
-                                        <button
-                                            onClick={() => handleDownload(inv)}
-                                            className="text-slate-400 hover:text-blue-600 transition p-1"
-                                            title="Download PDF"
-                                        >
-                                            <Download size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => handleCloneInvoice(inv)}
-                                            className="text-slate-400 hover:text-green-600 transition p-1"
-                                            title="Clone Invoice"
-                                        >
-                                            <Copy size={18} />
-                                        </button>
+                                    <td className="p-4 text-right">
+                                        <ActionMenu
+                                            inv={inv}
+                                            onDownload={() => handleDownload(inv)}
+                                            onClone={() => handleClone(inv)}
+                                            onEdit={() => navigate(`/invoices/edit/${inv._id}`, { state: { invoice: inv } })}
+                                            onConvert={() => convertToFinal(inv._id)}
+                                            onPayment={() => setPaymentModal(inv)}
+                                            onHistory={() => setHistoryModal(inv)}
+                                        />
                                     </td>
                                 </tr>
                             ))}
@@ -292,38 +478,27 @@ const InvoiceList = () => {
                     </table>
                 </div>
                 {!loading && invoices.length === 0 && (
-                    <div className="p-12 text-center text-slate-500 bg-white">
-                        No invoices found. Create your first one!
-                    </div>
+                    <div className="p-12 text-center text-slate-500 rounded-b-xl">No invoices found. Create your first one!</div>
                 )}
             </div>
 
+            {/* Pagination */}
             {!loading && invoices.length > 0 && (
                 <div className="mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <p className="text-sm text-slate-500">
-                        Showing {invoices.length} of {totalItems} invoices
-                    </p>
+                    <p className="text-sm text-slate-500">Showing {invoices.length} of {totalItems} invoices</p>
                     <div className="flex space-x-2">
-                        <button
-                            disabled={page === 1}
-                            onClick={() => setPage(page - 1)}
-                            className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-                        >
-                            Previous
-                        </button>
-                        <span className="flex items-center px-4 text-sm font-medium text-slate-700">
-                            Page {page} of {totalPages}
-                        </span>
-                        <button
-                            disabled={page === totalPages}
-                            onClick={() => setPage(page + 1)}
-                            className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-                        >
-                            Next
-                        </button>
+                        <button disabled={page === 1} onClick={() => setPage(page - 1)}
+                            className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-50">Previous</button>
+                        <span className="flex items-center px-4 text-sm font-medium text-slate-700">Page {page} of {totalPages}</span>
+                        <button disabled={page === totalPages} onClick={() => setPage(page + 1)}
+                            className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-50">Next</button>
                     </div>
                 </div>
             )}
+
+            {/* Modals */}
+            {paymentModal && <PaymentModal inv={paymentModal} onClose={() => setPaymentModal(null)} onSuccess={fetchInvoices} />}
+            {historyModal && <HistoryModal inv={historyModal} onClose={() => setHistoryModal(null)} />}
         </div>
     );
 };

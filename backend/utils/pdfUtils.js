@@ -362,6 +362,7 @@ const renderCustomLayout = (doc, invoice, user) => {
         cardBorderRadius: 6, tableBorderRadius: 6, borderWidth: 1,
         showHeaderBorder: true, showCardBorder: true,
         showRowDividers: true, showAlternateRows: true, showSummaryBorders: true,
+        showLogo: true,
         showDueDate: true, showBusinessAddress: true, showGstin: true,
         showCustomerAddress: true, showThankYou: true,
         footerText: 'Payment due within 7 days. Thank you for your business.',
@@ -380,7 +381,7 @@ const renderCustomLayout = (doc, invoice, user) => {
     const headerStartY = y;
     let logoEndX = P;
 
-    if (user?.logo) {
+    if (user?.logo && C.showLogo !== false) {
         try {
             let logoX = P;
             if (C.logoPosition === 'center') logoX = (595 - C.logoSize) / 2;
