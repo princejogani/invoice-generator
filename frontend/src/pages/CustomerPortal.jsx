@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import { Download, CheckCircle, XCircle, Phone, MapPin, Building2, ExternalLink } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Phone, MapPin, Building2, ExternalLink, CreditCard } from 'lucide-react';
 
 const CustomerPortal = () => {
     const { token } = useParams();
@@ -127,12 +127,14 @@ const CustomerPortal = () => {
                                             </div>
                                             <div className="text-right">
                                                 <p className="font-black text-slate-800 text-lg">₹{inv.finalAmount.toLocaleString()}</p>
-                                                {/* <button
-                                                    onClick={() => handleDownload(inv._id)}
-                                                    className="inline-flex items-center gap-1.5 text-blue-600 text-xs font-black uppercase tracking-widest hover:underline mt-1"
-                                                >
-                                                    <Download size={14} /> PDF
-                                                </button> */}
+                                                {inv.status !== 'paid' && inv.upiPaymentToken && business.upiId && (
+                                                    <Link
+                                                        to={`/pay/${inv.upiPaymentToken}`}
+                                                        className="inline-flex items-center gap-1 mt-1 bg-blue-600 text-white text-xs font-black px-3 py-1.5 rounded-xl hover:bg-blue-700 transition"
+                                                    >
+                                                        <CreditCard size={12} /> Pay Now
+                                                    </Link>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

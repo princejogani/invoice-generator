@@ -14,6 +14,7 @@ import AdminUserCreate from './pages/AdminUserCreate';
 import UserList from './pages/UserList';
 import UserEdit from './pages/UserEdit';
 import CustomerPortal from './pages/CustomerPortal';
+import UpiPaymentPage from './pages/UpiPaymentPage';
 import { Menu } from 'lucide-react';
 import api from './api';
 
@@ -82,6 +83,7 @@ const AppContent = () => {
       <main className="flex-1 overflow-y-auto h-screen relative">
         <Routes>
           <Route path="/p/:token" element={<CustomerPortal />} />
+          <Route path="/pay/:token" element={<UpiPaymentPage />} />
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
           {/* <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} /> */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

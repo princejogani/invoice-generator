@@ -38,6 +38,8 @@ const InvoiceSchema = new mongoose.Schema({
     ],
     isDraft: { type: Boolean, default: false },
     sentOnWhatsapp: { type: Boolean, default: false },
+    upiPaymentToken: { type: String, default: null },
+    upiClaimedAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now }
 });
 

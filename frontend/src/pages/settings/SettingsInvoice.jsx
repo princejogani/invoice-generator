@@ -468,11 +468,11 @@ const SettingsInvoice = ({ profile, setProfile, onSave, loading }) => {
                     <Section title="Typography" icon={Type}>
                         <SelectRow label="Font Family" value={c.fontFamily} onChange={v => setC({ fontFamily: v })} options={[
                             { value: 'Helvetica, Arial, sans-serif', label: 'Helvetica' },
-                            { value: 'Georgia, serif', label: 'Georgia' },
+                            // { value: 'Georgia, serif', label: 'Georgia' },
                             { value: '"Times New Roman", serif', label: 'Times New Roman' },
                             { value: '"Courier New", monospace', label: 'Courier New' },
-                            { value: 'Verdana, sans-serif', label: 'Verdana' },
-                            { value: 'Tahoma, sans-serif', label: 'Tahoma' },
+                            // { value: 'Verdana, sans-serif', label: 'Verdana' },
+                            // { value: 'Tahoma, sans-serif', label: 'Tahoma' },
                         ]} />
                         <Slider label="Body Font Size" min={8} max={14} value={c.fontSize} onChange={v => setC({ fontSize: v })} />
                         <Slider label="Header Font Size" min={16} max={36} value={c.headerFontSize} onChange={v => setC({ headerFontSize: v })} />

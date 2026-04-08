@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building, Save } from 'lucide-react';
+import { Building, Save, CreditCard } from 'lucide-react';
 
 const SettingsProfile = ({ profile, setProfile, onSave, loading }) => {
     const [password, setPassword] = useState('');
@@ -83,6 +83,37 @@ const SettingsProfile = ({ profile, setProfile, onSave, loading }) => {
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Business Address</label>
                     <textarea placeholder="Area, Landmark, City, State, Pincode" className="w-full h-24 p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                         value={profile.businessAddress} onChange={(e) => setProfile({ ...profile, businessAddress: e.target.value })} />
+                </div>
+            </div>
+
+            {/* Payment Details */}
+            <div className="pt-8 border-t border-slate-200">
+                <div className="flex items-center gap-2 mb-6">
+                    <CreditCard className="text-blue-600" size={20} />
+                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Payment Details</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-2">
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">UPI ID</label>
+                        <input type="text" placeholder="e.g. yourname@upi or 9876543210@paytm" className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                            value={profile.upiId || ''} onChange={(e) => setProfile({ ...profile, upiId: e.target.value })} />
+                        <p className="text-xs text-slate-400 mt-1">Used to generate UPI payment links in invoices and WhatsApp messages.</p>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Bank Name</label>
+                        <input type="text" placeholder="e.g. State Bank of India" className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={profile.bankName || ''} onChange={(e) => setProfile({ ...profile, bankName: e.target.value })} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">IFSC Code</label>
+                        <input type="text" placeholder="e.g. SBIN0001234" className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                            value={profile.ifscCode || ''} onChange={(e) => setProfile({ ...profile, ifscCode: e.target.value })} />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Account Number</label>
+                        <input type="text" placeholder="e.g. 1234567890" className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                            value={profile.accountNumber || ''} onChange={(e) => setProfile({ ...profile, accountNumber: e.target.value })} />
+                    </div>
                 </div>
             </div>
 

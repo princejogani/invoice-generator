@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import api from '../api';
 import {
     Search, FileDown, Check, Edit, Copy, Download,
-    MoreVertical, CreditCard, History, X, CheckCircle, Clock, XCircle
+    MoreVertical, CreditCard, History, X, CheckCircle, Clock, XCircle, ShieldCheck
 } from 'lucide-react';
 
 // ── Status Badge ─────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ StatusBadge.propTypes = {
 StatusBadge.defaultProps = { paidAmount: 0 };
 
 // ── 3-dot Action Dropdown (portal-based to escape overflow:hidden) ────────────
-const ActionMenu = ({ inv, onDownload, onClone, onEdit, onConvert, onPayment, onHistory }) => {
+const ActionMenu = ({ inv, onDownload, onClone, onEdit, onConvert, onPayment, onHistory, onVerifyUpi }) => {
     const [open, setOpen] = useState(false);
     const [pos, setPos] = useState({ top: 0, left: 0 });
     const btnRef = useRef(null);
@@ -102,6 +102,7 @@ const ActionMenu = ({ inv, onDownload, onClone, onEdit, onConvert, onPayment, on
                     {menuItem(<Download size={13} />, 'Download PDF', onDownload)}
                     {menuItem(<Copy size={13} />, 'Clone Invoice', onClone)}
                     {!inv.isDraft && inv.status !== 'paid' && menuItem(<CreditCard size={13} />, 'Record Payment', onPayment, 'text-blue-700')}
+                    {!inv.isDraft && inv.upiClaimedAt && inv.status !== 'paid' && menuItem(<ShieldCheck size={13} />, 'Verify UPI Payment', onVerifyUpi, 'text-yellow-700 font-black')}
                     {!inv.isDraft && menuItem(<History size={13} />, 'Transaction History', onHistory)}
                 </div>,
                 document.body
@@ -341,6 +342,18 @@ const InvoiceList = () => {
         } catch { alert('Failed to convert draft'); }
     };
 
+    const verifyUpiPayment = async (inv) => {
+        if (!window.confirm(
+            `Confirm that you have received ₹${inv.finalAmount.toLocaleString()} via UPI from ${inv.customerName}?\n\nThis will mark the invoice as Paid and send a WhatsApp confirmation to the customer.`
+        )) return;
+        try {
+            await api.post('/invoice/verify-upi-payment', { id: inv._id });
+            fetchInvoices();
+        } catch (e) {
+            alert(e.response?.data?.message || 'Failed to verify payment');
+        }
+    };
+
     const handleDownload = async (inv) => {
         try {
             const response = await api.get(`/whatsapp/download/${inv._id}`, { responseType: 'blob' });
@@ -455,6 +468,11 @@ const InvoiceList = () => {
                                     <td className="p-4 text-sm text-slate-500">{new Date(inv.createdAt).toLocaleDateString()}</td>
                                     <td className="p-4">
                                         <StatusBadge status={inv.status} paidAmount={inv.paidAmount} finalAmount={inv.finalAmount} />
+                                        {inv.upiClaimedAt && inv.status !== 'paid' && (
+                                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700">
+                                                <ShieldCheck size={10} /> UPI Claimed
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="p-4">
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold ${inv.isDraft ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
@@ -470,6 +488,7 @@ const InvoiceList = () => {
                                             onConvert={() => convertToFinal(inv._id)}
                                             onPayment={() => setPaymentModal(inv)}
                                             onHistory={() => setHistoryModal(inv)}
+                                            onVerifyUpi={() => verifyUpiPayment(inv)}
                                         />
                                     </td>
                                 </tr>

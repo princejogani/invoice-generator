@@ -6,11 +6,10 @@ const path = require('path');
 // Map CSS font-family strings to PDFKit built-in font names
 const mapFont = (fontFamily, bold = false) => {
     const f = (fontFamily || '').toLowerCase();
-    if (f.includes('times') || f.includes('georgia') || f.includes('serif')) {
+    if (f.includes('courier')) return bold ? 'Courier-Bold' : 'Courier';
+    // match serif but NOT sans-serif
+    if (f.includes('times') || f.includes('georgia') || /(?<!sans-)serif/.test(f)) {
         return bold ? 'Times-Bold' : 'Times-Roman';
-    }
-    if (f.includes('courier')) {
-        return bold ? 'Courier-Bold' : 'Courier';
     }
     // Helvetica, Arial, Verdana, Tahoma, sans-serif → Helvetica
     return bold ? 'Helvetica-Bold' : 'Helvetica';
@@ -156,7 +155,7 @@ const renderModernLayout = (doc, invoice, user) => {
     renderRow('Subtotal', `₹${invoice.subtotal.toLocaleString()}`);
 
     if (invoice.type === 'GST' || invoice.type === 'gst') {
-        renderRow(`GST (${invoice.gstPercentage || 18}%)`, `₹${invoice.gst.toLocaleString()}`);
+        renderRow(`Tax`, `₹${invoice.gst.toLocaleString()}`);
     }
 
     // Handle adjustments
@@ -307,7 +306,7 @@ const renderProfessionalLayout = (doc, invoice, user) => {
     renderRow('Subtotal', `₹${invoice.subtotal.toLocaleString()}`);
 
     if (invoice.type === 'GST' || invoice.type === 'gst') {
-        renderRow(`GST (${invoice.gstPercentage || 18}%)`, `₹${invoice.gst.toLocaleString()}`);
+        renderRow(`Tax`, `₹${invoice.gst.toLocaleString()}`);
     }
 
     // Handle multiple adjustments
@@ -518,7 +517,7 @@ const renderCustomLayout = (doc, invoice, user) => {
 
     drawSumRow('Subtotal', `Rs.${invoice.subtotal.toLocaleString()}`);
     if (invoice.type === 'GST' || invoice.type === 'gst') {
-        drawSumRow(`GST (${invoice.gstPercentage || 18}%)`, `Rs.${invoice.gst.toLocaleString()}`);
+        drawSumRow(`Tax`, `Rs.${invoice.gst.toLocaleString()}`);
     }
     if (invoice.adjustments && invoice.adjustments.length > 0) {
         invoice.adjustments.forEach(adj => {
@@ -548,6 +547,7 @@ const renderCustomLayout = (doc, invoice, user) => {
 
     // ── FOOTER ───────────────────────────────────────────────────────────────
     const hasFooter = C.footerText?.trim() || C.showThankYou;
+
     if (hasFooter) {
         doc.moveTo(P, y).lineTo(595 - P, y).lineWidth(C.borderWidth).stroke(C.borderColor);
         y += C.sectionSpacing / 2;

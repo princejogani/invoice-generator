@@ -34,6 +34,7 @@ const Settings = () => {
         invoiceCustomizations: DEFAULT_CUSTOMIZATIONS,
         businessName: '', tagline: '', gstin: '',
         businessAddress: '', businessPhone: '', logo: '',
+        upiId: '', bankName: '', accountNumber: '', ifscCode: '',
     });
 
     useEffect(() => {

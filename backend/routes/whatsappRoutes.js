@@ -6,6 +6,24 @@ const Invoice = require('../models/Invoice');
 const User = require('../models/User');
 const { generateInvoicePDF, generateInvoicePDFBuffer } = require('../utils/pdfUtils');
 
+const buildMessage = (template, invoice, user) => {
+    const invNo = `#${invoice._id.toString().slice(-6).toUpperCase()}`;
+
+    let msg = template || `Hello {{customerName}}, your invoice {{invoiceNo}} for {{amount}} from {{businessName}} is ready.`;
+    msg = msg
+        .replace(/\{\{customerName\}\}/g, invoice.customerName)
+        .replace(/\{\{amount\}\}/g, `₹${invoice.finalAmount.toLocaleString()}`)
+        .replace(/\{\{businessName\}\}/g, user.businessName || user.name || '')
+        .replace(/\{\{invoiceNo\}\}/g, invNo)
+        .replace(/\{\{paymentLink\}\}/g, user.upiId || '');
+
+    if (user.upiId && !(template || '').includes('{{paymentLink}}')) {
+        msg += `\n\n💳 *Pay via UPI*\nUPI ID: *${user.upiId}*\nAmount: *₹${invoice.finalAmount.toLocaleString()}*\nRef: ${invNo}\n\nOpen PhonePe / GPay / Paytm → Send Money → Enter UPI ID above`;
+    }
+
+    return msg;
+};
+
 const formatPhone = (phone) => {
     let cleaned = phone.replace(/\D/g, '');
     if (cleaned.length === 10) cleaned = '91' + cleaned;
@@ -19,9 +37,7 @@ router.get('/status', protect, async (req, res) => {
 
 router.get('/qr', protect, async (req, res) => {
     try {
-        const client = await initWhatsApp(req.user._id.toString());
-        // In a real app, the QR is handled via socket.io. 
-        // Here we just initialize. The console will show the QR.
+        await initWhatsApp(req.user._id.toString());
         res.json({ message: 'WhatsApp initialization started. Please wait for the QR code to appear.' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -51,23 +67,9 @@ router.post('/send-invoice', protect, async (req, res) => {
         if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
         const user = await User.findById(req.user._id);
-
-        let finalMessage = message;
-        if (!finalMessage && user.whatsappTemplate) {
-            finalMessage = user.whatsappTemplate
-                .replace('{{customerName}}', invoice.customerName)
-                .replace('{{amount}}', `₹${invoice.finalAmount}`)
-                .replace('{{businessName}}', user.name);
-        }
-
-        if (!finalMessage) {
-            finalMessage = `Hello ${invoice.customerName}, your invoice for ₹${invoice.finalAmount} is ready.`;
-        }
-
-        // Generate PDF Buffer
+        const finalMessage = buildMessage(message || user.whatsappTemplate, invoice, user);
         const pdfBuffer = await generateInvoicePDFBuffer(invoice, user);
 
-        // Send with PDF
         await sendInvoiceWhatsApp(
             req.user._id.toString(),
             formatPhone(invoice.customerPhone),

@@ -4,6 +4,7 @@ const Customer = require('../models/Customer');
 const User = require('../models/User');
 const { sendInvoiceWhatsApp } = require('../utils/whatsappUtils');
 const { generateInvoicePDFBuffer } = require('../utils/pdfUtils');
+const { generatePaymentToken } = require('../utils/upiUtils');
 
 // @desc    Create a new invoice
 // @route   POST /api/invoice/create
@@ -67,6 +68,7 @@ const createInvoice = async (req, res) => {
         adjustments: invoiceAdjustments,
         finalAmount,
         isDraft,
+        upiPaymentToken: generatePaymentToken(),
     });
 
     // 3. Update customer stats only for non-draft invoices
@@ -311,14 +313,25 @@ const convertDraftToFinal = async (req, res) => {
             try {
                 const user = await User.findById(req.businessId);
 
+                const invNo = `#${invoice._id.toString().slice(-6).toUpperCase()}`;
+                const upiInstructions = user.upiId
+                    ? `\n\n💳 *Pay via UPI*\nUPI ID: *${user.upiId}*\nAmount: *₹${invoice.finalAmount.toLocaleString()}*\nRef: ${invNo}\n\nOpen PhonePe / GPay / Paytm → Send Money → Enter UPI ID above`
+                    : '';
+
                 let finalMessage = user.whatsappTemplate;
                 if (!finalMessage) {
-                    finalMessage = `Hello ${invoice.customerName}, your invoice for ₹${invoice.finalAmount} is ready.`;
+                    finalMessage = `Hello ${invoice.customerName}, your invoice ${invNo} for ₹${invoice.finalAmount.toLocaleString()} is ready.`;
+                    finalMessage += upiInstructions;
                 } else {
                     finalMessage = finalMessage
-                        .replace('{{customerName}}', invoice.customerName)
-                        .replace('{{amount}}', `₹${invoice.finalAmount}`)
-                        .replace('{{businessName}}', user.name || user.businessName || '');
+                        .replace(/\{\{customerName\}\}/g, invoice.customerName)
+                        .replace(/\{\{amount\}\}/g, `₹${invoice.finalAmount.toLocaleString()}`)
+                        .replace(/\{\{businessName\}\}/g, user.businessName || user.name || '')
+                        .replace(/\{\{invoiceNo\}\}/g, invNo)
+                        .replace(/\{\{paymentLink\}\}/g, user.upiId || '');
+                    if (user.upiId && !user.whatsappTemplate.includes('{{paymentLink}}')) {
+                        finalMessage += upiInstructions;
+                    }
                 }
 
                 // Generate PDF Buffer
@@ -465,6 +478,58 @@ const recordPayment = async (req, res) => {
     }
 };
 
+// @desc    Business owner verifies and confirms a customer UPI payment claim
+// @route   POST /api/invoice/verify-upi-payment
+// @access  Private
+const verifyUpiPayment = async (req, res) => {
+    const { id } = req.body;
+    try {
+        const invoice = await Invoice.findOne({ _id: id, userId: req.businessId });
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+        if (invoice.status === 'paid') return res.status(400).json({ message: 'Invoice already paid' });
+        if (!invoice.upiClaimedAt) return res.status(400).json({ message: 'No payment claim found for this invoice' });
+
+        invoice.status = 'paid';
+        invoice.paidAmount = invoice.finalAmount;
+        invoice.payments.push({
+            amount: invoice.finalAmount,
+            method: 'ONLINE',
+            recordedByName: req.user?.name || 'Business Owner (UPI Verified)',
+            date: new Date(),
+        });
+        await invoice.save();
+
+        const customer = await Customer.findById(invoice.customerId);
+        if (customer) {
+            customer.totalPendingAmount = Math.max(0, customer.totalPendingAmount - invoice.finalAmount);
+            await customer.save();
+        }
+
+        // Send WhatsApp confirmation to customer
+        const user = await User.findById(req.businessId);
+        if (user) {
+            try {
+                const invNo = invoice._id.toString().slice(-6).toUpperCase();
+                const msg =
+                    `✅ *Payment Received & Verified!*
+
+Hi ${invoice.customerName}, your UPI payment of *₹${invoice.finalAmount.toLocaleString()}* for Invoice *#${invNo}* has been verified and confirmed.
+
+Thank you for your payment! 🙏
+
+— ${user.businessName || user.name}`;
+                await sendInvoiceWhatsApp(invoice.userId.toString(), invoice.customerPhone, msg, null);
+            } catch (waErr) {
+                console.error('Customer WhatsApp notification failed:', waErr.message);
+            }
+        }
+
+        res.json(invoice);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Get payment history for an invoice
 // @route   GET /api/invoice/:id/payments
 // @access  Private
@@ -478,4 +543,4 @@ const getPayments = async (req, res) => {
     }
 };
 
-module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices, convertDraftToFinal, updateInvoice, recordPayment, getPayments };
+module.exports = { createInvoice, getInvoices, updateInvoiceStatus, getDashboardStats, exportInvoices, convertDraftToFinal, updateInvoice, recordPayment, getPayments, verifyUpiPayment };
