@@ -3,7 +3,7 @@ services:
     name: invoice-generator-backend
     env: node
     rootDir: backend
-    buildCommand: npm install && npx puppeteer browsers install chrome
+    buildCommand: npm install && PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome
     startCommand: node server.js
     envVars:
       - key: PUPPETEER_CACHE_DIR
