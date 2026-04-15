@@ -14,7 +14,18 @@ const initWhatsApp = async (userId) => {
 
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: userId }),
-        puppeteer: { args: ['--no-sandbox'] }
+        puppeteer: {
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu',
+            ],
+        },
     });
 
     qrStrings[userId] = 'INITIALIZING';

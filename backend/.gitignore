@@ -10,6 +10,7 @@ dist
 .wwebjs_auth
 .wwebjs_cache
 
-# Uploads
+# Uploads (keep folder structure, ignore actual files)
 uploads/logos/*
 !uploads/logos/.gitkeep
+uploads/logos/
