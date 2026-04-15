@@ -157,7 +157,14 @@ const initWhatsApp = async (userId) => {
         }
     });
 
-    client.initialize();
+    try {
+        await client.initialize();
+    } catch (err) {
+        console.error(`WhatsApp init failed for ${userId}:`, err.message);
+        qrStrings[userId] = 'INIT_FAILED';
+        delete clients[userId];
+        throw err;
+    }
     clients[userId] = client;
     return client;
 };
