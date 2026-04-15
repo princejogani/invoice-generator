@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../api';
+import toast from 'react-hot-toast';
 import { UserPlus, ShieldCheck, Mail, Lock, Building, FileText, Smartphone, MapPin, CheckCircle } from 'lucide-react';
 
 const AdminUserCreate = () => {
@@ -27,7 +28,7 @@ const AdminUserCreate = () => {
                 gstin: '', businessAddress: '', businessPhone: '', logo: ''
             });
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to create user');
+            toast.error(err.response?.data?.message || 'Failed to create user');
         }
         setLoading(false);
     };

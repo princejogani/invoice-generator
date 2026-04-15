@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { Plus, Trash2, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 
 const CreateInvoice = () => {
@@ -47,13 +48,13 @@ const CreateInvoice = () => {
                     const invoice = data.invoices[0];
                     populateFormWithInvoice(invoice);
                 } else {
-                    alert('Invoice not found');
+                    toast.error('Invoice not found');
                     navigate('/invoices');
                 }
             }
         } catch (err) {
             console.error('Failed to load invoice:', err);
-            alert('Failed to load invoice data');
+            toast.error('Failed to load invoice data');
             navigate('/invoices');
         }
     }, [id, location.state, navigate]);
@@ -184,13 +185,13 @@ const CreateInvoice = () => {
     // Adjustment management functions
     const addAdjustment = () => {
         if (!newAdjustment.label.trim() || newAdjustment.value === '') {
-            alert('Please enter adjustment label and value');
+            toast.error('Please enter adjustment label and value');
             return;
         }
 
         const value = parseFloat(newAdjustment.value);
         if (isNaN(value)) {
-            alert('Please enter a valid number for adjustment value');
+            toast.error('Please enter a valid number for adjustment value');
             return;
         }
 
@@ -259,7 +260,7 @@ const CreateInvoice = () => {
                     });
                 }
 
-                alert('Invoice updated successfully!');
+                toast.success('Invoice updated successfully!');
                 navigate('/invoices?draft=' + (saveAsDraft ? 'true' : 'false'));
             } else {
                 // Create new invoice
@@ -285,7 +286,7 @@ const CreateInvoice = () => {
                 }
 
                 if (saveAsDraft) {
-                    alert('Invoice saved as draft successfully!');
+                    toast.success('Invoice saved as draft!');
                     navigate('/invoices?draft=true');
                 } else {
                     navigate('/invoices');
@@ -293,7 +294,8 @@ const CreateInvoice = () => {
             }
         } catch (err) {
             console.error(err);
-            alert(isEditMode ? 'Failed to update invoice' : 'Failed to create invoice');
+            const msg = err.response?.data?.message || (isEditMode ? 'Failed to update invoice' : 'Failed to create invoice');
+            toast.error(msg);
         }
         setLoading(false);
     };
@@ -614,7 +616,7 @@ const CreateInvoice = () => {
                     type="button"
                     onClick={() => {
                         if (!customer.name || !customer.phone) {
-                            alert('Please fill customer details');
+                            toast.error('Please fill customer details');
                             return;
                         }
                         setShowPreview(true);

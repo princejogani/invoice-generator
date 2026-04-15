@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
@@ -85,7 +86,7 @@ const AppContent = () => {
           <Route path="/p/:token" element={<CustomerPortal />} />
           <Route path="/pay/:token" element={<UpiPaymentPage />} />
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          {/* <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} /> */}
+          <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
           <Route path="/invoices/create" element={<ProtectedRoute><CreateInvoice /></ProtectedRoute>} />
@@ -107,6 +108,15 @@ function App() {
     <Router>
       <AuthProvider>
         <AppContent />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 3500,
+            style: { fontSize: '14px', fontWeight: '600' },
+            success: { style: { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' } },
+            error: { style: { background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' } },
+          }}
+        />
       </AuthProvider>
     </Router>
   );

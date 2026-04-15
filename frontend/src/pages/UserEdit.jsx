@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import toast from 'react-hot-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, ChevronLeft, User, Mail, Lock, Building, Smartphone, MapPin, ShieldCheck, CheckCircle } from 'lucide-react';
 
@@ -62,7 +63,7 @@ const UserEdit = () => {
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to update user');
+            toast.error(err.response?.data?.message || 'Failed to update user');
         }
         setLoading(false);
     };

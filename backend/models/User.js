@@ -7,6 +7,7 @@ const UserSchema = new mongoose.Schema({
     role: { type: String, enum: ['admin', 'user', 'staff'], default: 'user' },
     plan: { type: String, enum: ['free', 'paid'], default: 'free' },
     isActive: { type: Boolean, default: true },
+    status: { type: String, enum: ['pending', 'active', 'suspended'], default: 'pending' },
     whatsappSession: { type: Object, default: null },
     whatsappTemplate: {
         type: String,

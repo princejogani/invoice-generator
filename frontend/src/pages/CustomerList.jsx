@@ -1,5 +1,6 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { User, Phone, Calendar, Search, Share2, Edit } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
@@ -36,47 +37,35 @@ const CustomerList = () => {
 
     const copyPortalLink = (customer) => {
         if (!customer?.portalToken) {
-            alert('No portal token found for this customer');
+            toast.error('No portal token found for this customer');
             return;
         }
         const token = customer.portalToken;
         const link = `${window.location?.origin}/p/${token}`;
 
-        // Use modern Clipboard API if available
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(link)
-                .then(() => {
-                    alert('Historical portal link copied to clipboard!');
-                })
-                .catch((err) => {
-                    console.error('Clipboard API failed:', err);
-                    fallbackCopyToClipboard(link);
-                });
+                .then(() => toast.success('Portal link copied to clipboard!'))
+                .catch(() => fallbackCopyToClipboard(link));
         } else {
             fallbackCopyToClipboard(link);
         }
     };
 
     const fallbackCopyToClipboard = (text) => {
-        // Create a temporary textarea element
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        textarea.setSelectionRange(0, 99999); // For mobile devices
-
+        textarea.setSelectionRange(0, 99999);
         try {
-            const successful = document.execCommand('copy');
-            if (successful) {
-                alert('Historical portal link copied to clipboard!');
-            } else {
-                alert('Failed to copy link. Please copy manually: ' + text);
-            }
-        } catch (err) {
-            console.error('Fallback copy failed:', err);
-            alert('Failed to copy link. Please copy manually: ' + text);
+            document.execCommand('copy')
+                ? toast.success('Portal link copied to clipboard!')
+                : toast.error('Failed to copy. Link: ' + text);
+        } catch {
+            toast.error('Failed to copy link');
         } finally {
             document.body.removeChild(textarea);
         }
@@ -109,15 +98,12 @@ const CustomerList = () => {
                 name: editName.trim(),
                 phone: editPhone.trim()
             });
-
-            // Update the customer in the local state
             setCustomers(customers.map(cust =>
                 cust._id === editingCustomer._id
                     ? { ...cust, name: editName.trim(), phone: editPhone.trim() }
                     : cust
             ));
-
-            alert('Customer updated successfully!');
+            toast.success('Customer updated successfully!');
             handleCloseEdit();
         } catch (err) {
             console.error('Update failed:', err);

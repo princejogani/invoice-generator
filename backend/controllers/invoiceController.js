@@ -24,6 +24,24 @@ const createInvoice = async (req, res) => {
         isDraft = false
     } = req.body;
 
+    // Free plan: max 5 invoices per day (non-draft only)
+    const businessUser = await User.findById(req.businessId);
+    if (businessUser && businessUser.plan === 'free' && !isDraft) {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const todayCount = await Invoice.countDocuments({
+            userId: req.businessId,
+            isDraft: false,
+            createdAt: { $gte: startOfDay },
+        });
+        if (todayCount >= 5) {
+            return res.status(403).json({
+                message: 'Free plan limit reached: 5 invoices per day. Upgrade to paid plan for unlimited invoices.',
+                limitReached: true,
+            });
+        }
+    }
+
     const customerPhone = rawPhone.trim();
 
     // 1. Find or create customer
@@ -184,32 +202,70 @@ const getDashboardStats = async (req, res) => {
     try {
         const userId = new mongoose.Types.ObjectId(req.businessId);
 
-        const [invoiceStats, customerCount] = await Promise.all([
+        const now = new Date();
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+        const [invoiceStats, customerCount, monthlyRevenue, recentInvoices] = await Promise.all([
             Invoice.aggregate([
-                { $match: { userId } },
+                { $match: { userId, isDraft: false } },
                 {
                     $group: {
                         _id: null,
                         totalInvoices: { $sum: 1 },
                         paidAmount: {
-                            $sum: { $cond: [{ $eq: ["$status", "paid"] }, "$finalAmount", 0] }
+                            $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$finalAmount', 0] }
                         },
                         pendingAmount: {
-                            $sum: { $cond: [{ $eq: ["$status", "unpaid"] }, "$finalAmount", 0] }
-                        }
+                            $sum: { $cond: [{ $eq: ['$status', 'unpaid'] }, '$finalAmount', 0] }
+                        },
+                        paidCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+                        unpaidCount: { $sum: { $cond: [{ $eq: ['$status', 'unpaid'] }, 1, 0] } },
+                        partialCount: { $sum: { $cond: [{ $eq: ['$status', 'partial'] }, 1, 0] } },
                     }
                 }
             ]),
-            Customer.countDocuments({ userId })
+            Customer.countDocuments({ userId }),
+            // Monthly revenue for last 6 months
+            Invoice.aggregate([
+                { $match: { userId, isDraft: false, createdAt: { $gte: sixMonthsAgo } } },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        revenue: { $sum: '$finalAmount' },
+                        count: { $sum: 1 },
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Top 5 customers by total invoiced
+            Invoice.aggregate([
+                { $match: { userId, isDraft: false } },
+                { $group: { _id: '$customerName', total: { $sum: '$finalAmount' }, count: { $sum: 1 } } },
+                { $sort: { total: -1 } },
+                { $limit: 5 }
+            ])
         ]);
 
-        const stats = invoiceStats[0] || { totalInvoices: 0, paidAmount: 0, pendingAmount: 0 };
+        const stats = invoiceStats[0] || { totalInvoices: 0, paidAmount: 0, pendingAmount: 0, paidCount: 0, unpaidCount: 0, partialCount: 0 };
+
+        // Format monthly revenue with month names
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formattedMonthly = monthlyRevenue.map(m => ({
+            month: monthNames[m._id.month - 1],
+            revenue: m.revenue,
+            count: m.count,
+        }));
 
         res.json({
             totalInvoices: stats.totalInvoices,
             paidAmount: stats.paidAmount,
             pendingAmount: stats.pendingAmount,
-            totalCustomers: customerCount
+            totalCustomers: customerCount,
+            paidCount: stats.paidCount,
+            unpaidCount: stats.unpaidCount,
+            partialCount: stats.partialCount,
+            monthlyRevenue: formattedMonthly,
+            topCustomers: recentInvoices,
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

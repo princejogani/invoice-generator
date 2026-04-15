@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api';
 import {
     Search, FileDown, Check, Edit, Copy, Download,
@@ -151,6 +152,7 @@ const PaymentModal = ({ inv, onClose, onSuccess }) => {
         setLoading(true);
         try {
             await api.post('/invoice/payment', { id: inv._id, amount: num, method });
+            toast.success('Payment recorded successfully!');
             onSuccess();
             onClose();
         } catch (e) {
@@ -334,23 +336,27 @@ const InvoiceList = () => {
 
     useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
-    const convertToFinal = async (id) => {
-        const sendWhatsApp = window.confirm('Send this invoice via WhatsApp after converting?');
+    const [convertModal, setConvertModal] = useState(null);
+    const [verifyModal, setVerifyModal] = useState(null);
+
+    const convertToFinal = async (id, sendWhatsApp = false) => {
         try {
             await api.patch('/invoice/convert-draft', { id, sendWhatsApp });
+            toast.success('Invoice converted to final!');
+            setConvertModal(null);
             fetchInvoices();
-        } catch { alert('Failed to convert draft'); }
+        } catch { toast.error('Failed to convert draft'); }
     };
 
     const verifyUpiPayment = async (inv) => {
-        if (!window.confirm(
-            `Confirm that you have received ₹${inv.finalAmount.toLocaleString()} via UPI from ${inv.customerName}?\n\nThis will mark the invoice as Paid and send a WhatsApp confirmation to the customer.`
-        )) return;
+        if (!verifyModal) { setVerifyModal(inv); return; }
         try {
-            await api.post('/invoice/verify-upi-payment', { id: inv._id });
+            await api.post('/invoice/verify-upi-payment', { id: verifyModal._id });
+            toast.success('UPI payment verified! Invoice marked as paid.');
+            setVerifyModal(null);
             fetchInvoices();
         } catch (e) {
-            alert(e.response?.data?.message || 'Failed to verify payment');
+            toast.error(e.response?.data?.message || 'Failed to verify payment');
         }
     };
 
@@ -364,7 +370,7 @@ const InvoiceList = () => {
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } catch { alert('Failed to download PDF'); }
+        } catch { toast.error('Failed to download PDF'); }
     };
 
     const handleClone = async (inv) => {
@@ -376,9 +382,9 @@ const InvoiceList = () => {
                 gstPercentage: inv.gstPercentage, adjustments: inv.adjustments || [],
                 finalAmount: inv.finalAmount, isDraft: true,
             });
-            alert('Invoice cloned as draft!');
+            toast.success('Invoice cloned as draft!');
             fetchInvoices();
-        } catch { alert('Failed to clone invoice'); }
+        } catch { toast.error('Failed to clone invoice'); }
     };
 
     const handleExportCSV = async () => {
@@ -391,7 +397,7 @@ const InvoiceList = () => {
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } catch { alert('Failed to export report'); }
+        } catch { toast.error('Failed to export report'); }
     };
 
     return (
@@ -485,7 +491,7 @@ const InvoiceList = () => {
                                             onDownload={() => handleDownload(inv)}
                                             onClone={() => handleClone(inv)}
                                             onEdit={() => navigate(`/invoices/edit/${inv._id}`, { state: { invoice: inv } })}
-                                            onConvert={() => convertToFinal(inv._id)}
+                                            onConvert={() => setConvertModal(inv._id)}
                                             onPayment={() => setPaymentModal(inv)}
                                             onHistory={() => setHistoryModal(inv)}
                                             onVerifyUpi={() => verifyUpiPayment(inv)}
@@ -518,6 +524,36 @@ const InvoiceList = () => {
             {/* Modals */}
             {paymentModal && <PaymentModal inv={paymentModal} onClose={() => setPaymentModal(null)} onSuccess={fetchInvoices} />}
             {historyModal && <HistoryModal inv={historyModal} onClose={() => setHistoryModal(null)} />}
+
+            {/* Convert Draft Confirm Modal */}
+            {convertModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                        <h3 className="font-bold text-slate-800 mb-2">Convert to Final Invoice?</h3>
+                        <p className="text-sm text-slate-500 mb-5">Do you want to send this invoice via WhatsApp after converting?</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => setConvertModal(null)} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onClick={() => convertToFinal(convertModal, false)} className="flex-1 py-2.5 rounded-lg bg-slate-700 text-white text-sm font-bold hover:bg-slate-800">Convert Only</button>
+                            <button onClick={() => convertToFinal(convertModal, true)} className="flex-1 py-2.5 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700">Convert + WhatsApp</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Verify UPI Confirm Modal */}
+            {verifyModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                        <h3 className="font-bold text-slate-800 mb-2">Verify UPI Payment?</h3>
+                        <p className="text-sm text-slate-500 mb-1">Confirm you received <span className="font-bold text-slate-800">₹{verifyModal.finalAmount?.toLocaleString()}</span> via UPI from <span className="font-bold">{verifyModal.customerName}</span>.</p>
+                        <p className="text-xs text-slate-400 mb-5">This will mark the invoice as Paid and send a WhatsApp confirmation.</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => setVerifyModal(null)} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onClick={() => verifyUpiPayment(verifyModal)} className="flex-1 py-2.5 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700">Yes, Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Building, FileText, MessageSquareMore, Users } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import SettingsProfile from './settings/SettingsProfile';
@@ -50,9 +51,9 @@ const Settings = () => {
         setLoading(true);
         try {
             await api.put('/auth/profile', data);
-            alert('Settings updated successfully!');
+            toast.success('Settings updated successfully!');
         } catch (err) {
-            alert('Failed to update settings');
+            toast.error('Failed to update settings');
         }
         setLoading(false);
     };

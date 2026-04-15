@@ -1,5 +1,6 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { Package, Search, Plus, Edit, Trash2, Tag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -70,7 +71,7 @@ const ProductList = () => {
             fetchProducts();
         } catch (err) {
             console.error(err);
-            alert('Failed to save product');
+            toast.error('Failed to save product');
         }
     };
 
@@ -89,14 +90,18 @@ const ProductList = () => {
         setShowForm(true);
     };
 
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
+
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) return;
+        if (deleteConfirm !== id) { setDeleteConfirm(id); return; }
         try {
             await api.delete(`/product/${id}`);
+            toast.success('Product deleted!');
+            setDeleteConfirm(null);
             fetchProducts();
         } catch (err) {
             console.error(err);
-            alert('Failed to delete product');
+            toast.error('Failed to delete product');
         }
     };
 
@@ -302,10 +307,14 @@ const ProductList = () => {
                                         </button>
                                         <button
                                             onClick={() => handleDelete(product._id)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded"
+                                            className={`p-2 rounded text-xs font-bold transition ${
+                                                deleteConfirm === product._id
+                                                    ? 'bg-red-600 text-white px-2'
+                                                    : 'text-red-600 hover:bg-red-50'
+                                            }`}
                                             title="Delete"
                                         >
-                                            <Trash2 size={16} />
+                                            {deleteConfirm === product._id ? 'Confirm?' : <Trash2 size={16} />}
                                         </button>
                                     </div>
                                 </div>

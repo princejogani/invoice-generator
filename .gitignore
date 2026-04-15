@@ -48,6 +48,14 @@ Thumbs.db
 # Project
 backend/.wwebjs_auth
 backend/.wwebjs_cache
+
+# Environment variables - NEVER commit these
+backend/.env
+frontend/.env
+.env
+.env.local
+.env.production
+.env.*
 node_modules/
 dist/
 #amplify

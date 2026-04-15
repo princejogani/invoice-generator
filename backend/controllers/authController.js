@@ -30,16 +30,15 @@ const registerUser = async (req, res) => {
         businessName,
         gstin,
         businessAddress,
-        businessPhone
+        businessPhone,
+        status: 'pending', // Requires admin approval
+        plan: 'free',
     });
 
     if (user) {
         res.status(201).json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            token: generateToken(user._id),
+            message: 'Registration successful! Your account is pending admin approval. You will be notified once approved.',
+            pending: true,
         });
     } else {
         res.status(400).json({ message: 'Invalid user data' });
@@ -55,6 +54,12 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
+        if (user.status === 'pending') {
+            return res.status(403).json({ message: 'Your account is pending admin approval. Please wait for activation.' });
+        }
+        if (user.status === 'suspended' || user.isActive === false) {
+            return res.status(403).json({ message: 'Your account has been suspended. Please contact support.' });
+        }
         res.json({
             _id: user._id,
             name: user.name,
@@ -84,6 +89,8 @@ const getUserProfile = async (req, res) => {
                 name: currentUser.name,
                 email: currentUser.email,
                 role: currentUser.role,
+                plan: businessUser.plan,
+                status: businessUser.status,
                 whatsappTemplate: businessUser.whatsappTemplate,
                 invoiceCustomizations: businessUser.invoiceCustomizations,
                 businessName: businessUser.businessName,
@@ -195,7 +202,9 @@ const adminCreateUser = async (req, res) => {
         gstin,
         businessAddress,
         businessPhone,
-        role: 'user' // Default to shop owner
+        role: 'user',
+        status: 'active', // Admin-created users are immediately active
+        plan: 'free',
     });
 
     if (logo) {
@@ -234,6 +243,9 @@ const getAllUsers = async (req, res) => {
             { email: { $regex: search, $options: 'i' } },
             { businessName: { $regex: search, $options: 'i' } }
         ];
+    }
+    if (req.query.status) {
+        query.status = req.query.status;
     }
 
     try {
@@ -403,6 +415,53 @@ const impersonateUser = async (req, res) => {
     }
 };
 
+// @desc    Admin approve a pending user
+// @route   PATCH /api/auth/user/:id/approve
+// @access  Private/Admin
+const approveUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        user.status = 'active';
+        user.isActive = true;
+        await user.save();
+        res.json({ message: 'User approved successfully', status: user.status });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Admin suspend/unsuspend a user
+// @route   PATCH /api/auth/user/:id/suspend
+// @access  Private/Admin
+const toggleSuspendUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        user.status = user.status === 'suspended' ? 'active' : 'suspended';
+        user.isActive = user.status === 'active';
+        await user.save();
+        res.json({ message: `User ${user.status}`, status: user.status });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Admin toggle user plan (free <-> paid)
+// @route   PATCH /api/auth/user/:id/plan
+// @access  Private/Admin
+const toggleUserPlan = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        user.plan = user.plan === 'paid' ? 'free' : 'paid';
+        await user.save();
+        res.json({ message: `Plan updated to ${user.plan}`, plan: user.plan });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
@@ -415,5 +474,8 @@ module.exports = {
     createStaff,
     getStaff,
     deleteStaff,
-    impersonateUser
+    impersonateUser,
+    approveUser,
+    toggleSuspendUser,
+    toggleUserPlan,
 };

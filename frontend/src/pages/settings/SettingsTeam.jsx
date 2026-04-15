@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Users, Shield, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../../api';
 import { useEffect } from 'react';
 
@@ -33,20 +34,20 @@ const SettingsTeam = () => {
             await api.post('/auth/staff', newStaff);
             setNewStaff({ name: '', email: '', password: '' });
             fetchStaff();
-            alert('Staff member added successfully!');
+            toast.success('Staff member added successfully!');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to add staff');
+            toast.error(err.response?.data?.message || 'Failed to add staff');
         }
         setStaffLoading(false);
     };
 
     const handleDeleteStaff = async (id) => {
-        if (!window.confirm('Remove this staff member?')) return;
         try {
             await api.delete(`/auth/staff/${id}`);
+            toast.success('Staff member removed!');
             fetchStaff();
         } catch (err) {
-            alert('Failed to remove staff');
+            toast.error('Failed to remove staff');
         }
     };
 

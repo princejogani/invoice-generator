@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import { Download, CheckCircle, XCircle, Phone, MapPin, Building2, ExternalLink, CreditCard } from 'lucide-react';
 
 const CustomerPortal = () => {
@@ -41,7 +42,7 @@ const CustomerPortal = () => {
             link.click();
             link.remove();
         } catch (err) {
-            alert('Failed to download PDF');
+            toast.error('Failed to download PDF');
         }
     };
 

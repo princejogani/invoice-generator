@@ -55,6 +55,9 @@ const Login = () => {
                 {/* <p className="mt-6 text-center text-slate-600 text-sm">
                     Don't have an account? <Link to="/register" className="text-blue-600 hover:underline">Register here</Link>
                 </p> */}
+                <p className="mt-6 text-center text-slate-600 text-sm">
+                    Don't have an account? <Link to="/register" className="text-blue-600 hover:underline">Register here</Link>
+                </p>
             </div>
         </div>
     );
