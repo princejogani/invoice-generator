@@ -1,4 +1,6 @@
-const { Client, LocalAuth, MessageMedia, Poll } = require('whatsapp-web.js');
+const { Client, RemoteAuth, MessageMedia, Poll } = require('whatsapp-web.js');
+const { MongoStore } = require('wwebjs-mongo');
+const mongoose = require('mongoose');
 const Invoice = require('../models/Invoice');
 const Customer = require('../models/Customer');
 const User = require('../models/User');
@@ -12,8 +14,14 @@ const ownerPollMap = {};
 const initWhatsApp = async (userId) => {
     if (clients[userId]) return clients[userId];
 
+    const store = new MongoStore({ mongoose });
+
     const client = new Client({
-        authStrategy: new LocalAuth({ clientId: userId }),
+        authStrategy: new RemoteAuth({
+            clientId: userId,
+            store,
+            backupSyncIntervalMs: 300000, // sync session to MongoDB every 5 min
+        }),
         puppeteer: {
             args: [
                 '--no-sandbox',
@@ -31,6 +39,9 @@ const initWhatsApp = async (userId) => {
     qrStrings[userId] = 'INITIALIZING';
 
     client.on('qr', (qr) => { qrStrings[userId] = qr; });
+    client.on('remote_session_saved', () => {
+        console.log(`WhatsApp session saved to MongoDB for ${userId}`);
+    });
     client.on('ready', () => {
         console.log(`WhatsApp ready for ${userId}`);
         qrStrings[userId] = 'CONNECTED';

@@ -37,8 +37,11 @@ router.get('/status', protect, async (req, res) => {
 
 router.get('/qr', protect, async (req, res) => {
     try {
-        await initWhatsApp(req.user._id.toString());
-        res.json({ message: 'WhatsApp initialization started. Please wait for the QR code to appear.' });
+        const userId = req.user._id.toString();
+        await initWhatsApp(userId);
+        const status = getQRStatus(userId);
+        // Return QR string so frontend can render it with a QR library
+        res.json({ message: 'WhatsApp initialization started.', qr: status !== 'INITIALIZING' ? status : null, status });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
