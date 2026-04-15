@@ -1,0 +1,15 @@
+node_modules
+dist
+
+# Environment variables
+.env
+.env.local
+
+
+# WhatsApp session & cache
+.wwebjs_auth
+.wwebjs_cache
+
+# Uploads
+uploads/logos/*
+!uploads/logos/.gitkeep

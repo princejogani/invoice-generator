@@ -17,7 +17,7 @@ const PREVIEW_VALUES = {
     '{{amount}}':       '₹5,000',
     '{{businessName}}': 'Your Business',
     '{{invoiceNo}}':    '#INV001',
-    '{{paymentLink}}':  'http://localhost:5173/pay/abc123token',
+    '{{paymentLink}}':  import.meta.env.VITE_BASE_URL + '/pay/abc123token',
 };
 
 const DEFAULT_TEMPLATE = `Hello {{customerName}},
