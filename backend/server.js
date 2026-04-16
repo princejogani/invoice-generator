@@ -1,7 +1,10 @@
-const express = require('express');
-const mongoose = require('mongoose');
 const path = require('path');
 const dotenv = require('dotenv');
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(__dirname, envFile) });
+
+const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -15,8 +18,6 @@ const productRoutes = require('./routes/productRoutes');
 const startReminderCron = require('./utils/reminderCron');
 const agentRoutes = require('./routes/agentRoutes');
 const agentCronService = require('./agents/agentCron');
-
-dotenv.config();
 
 connectDB();
 

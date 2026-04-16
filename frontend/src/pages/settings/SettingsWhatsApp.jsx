@@ -77,6 +77,27 @@ const SettingsWhatsApp = ({ profile, setProfile, onSave, loading }) => {
             </div>
         );
 
+        if (status === 'SERVICE_NOT_CONFIGURED') return (
+            <div className="py-12 text-center px-4">
+                <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-500">
+                    <Smartphone size={32} />
+                </div>
+                <p className="text-amber-700 font-semibold mb-1">WhatsApp Service Not Configured</p>
+                <p className="text-slate-500 text-sm">Set <code className="bg-slate-100 px-1 rounded">WHATSAPP_SERVICE_URL</code> in your backend <code className="bg-slate-100 px-1 rounded">.env</code> to enable WhatsApp.</p>
+            </div>
+        );
+
+        if (status === 'SERVICE_UNAVAILABLE') return (
+            <div className="py-12 text-center px-4">
+                <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                    <Smartphone size={32} />
+                </div>
+                <p className="text-red-700 font-semibold mb-1">WhatsApp Service Unavailable</p>
+                <p className="text-slate-500 text-sm mb-4">The WhatsApp microservice is not reachable. Make sure it's running on your Oracle Cloud instance.</p>
+                <button onClick={fetchStatus} className="text-slate-400 hover:text-slate-600 text-xs underline">Retry</button>
+            </div>
+        );
+
         if (status && status.length > 20) return (
             <div className="flex flex-col items-center justify-center py-6 space-y-6">
                 <p className="text-slate-700 font-medium text-center">Scan this QR code with your WhatsApp app</p>
@@ -94,7 +115,7 @@ const SettingsWhatsApp = ({ profile, setProfile, onSave, loading }) => {
                 <p className="text-slate-500 mb-6">Connect your WhatsApp to send invoices automatically.</p>
                 <button onClick={handleInitWhatsApp} disabled={waLoading || status === 'INITIALIZING'}
                     className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition shadow-md disabled:bg-slate-400">
-                    {status === 'INITIALIZING' ? 'Starting Server...' : 'Connect WhatsApp'}
+                    {status === 'INITIALIZING' ? 'Connecting to WhatsApp Service...' : 'Connect WhatsApp'}
                 </button>
             </div>
         );

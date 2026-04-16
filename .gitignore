@@ -55,7 +55,6 @@ frontend/.env
 .env
 .env.local
 .env.production
-.env.*
 node_modules/
 dist/
 #amplify
