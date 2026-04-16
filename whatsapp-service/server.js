@@ -52,6 +52,8 @@ const initWhatsApp = async (userId) => {
                 '--no-zygote',
                 '--single-process',
                 '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
             ],
         },
     });
@@ -62,8 +64,30 @@ const initWhatsApp = async (userId) => {
     client.on('remote_session_saved', () => console.log(`Session saved for ${userId}`));
     client.on('ready', () => { console.log(`WhatsApp ready for ${userId}`); qrStrings[userId] = 'CONNECTED'; });
     client.on('authenticated', () => { qrStrings[userId] = 'AUTHENTICATED'; });
-    client.on('auth_failure', () => { qrStrings[userId] = 'AUTH_FAILURE'; });
-    client.on('disconnected', () => { qrStrings[userId] = 'DISCONNECTED'; delete clients[userId]; });
+    client.on('auth_failure', (msg) => { 
+        console.log(`Auth failure for ${userId}:`, msg); 
+        qrStrings[userId] = 'AUTH_FAILURE'; 
+    });
+    client.on('disconnected', (reason) => { 
+        console.log(`Disconnected ${userId}:`, reason); 
+        qrStrings[userId] = 'DISCONNECTED'; 
+        delete clients[userId]; 
+    });
+    
+    // Handle errors to prevent crashes
+    client.on('error', (error) => {
+        console.error(`Client error for ${userId}:`, error.message);
+        qrStrings[userId] = 'ERROR';
+    });
+    
+    // Handle page errors
+    client.pupPage?.on('error', (error) => {
+        console.error(`Page error for ${userId}:`, error.message);
+    });
+    
+    client.pupPage?.on('pageerror', (error) => {
+        console.error(`Page script error for ${userId}:`, error.message);
+    });
 
     client.on('vote_update', async (vote) => {
         try {
@@ -93,9 +117,9 @@ const initWhatsApp = async (userId) => {
                 });
 
                 const invNo = invoiceId.slice(-6).toUpperCase();
-                const custNumberId = await client.getNumberId(invoice.customerPhone.replace(/\D/g, ''));
+                const custNumberId = await safeGetNumberId(client, invoice.customerPhone.replace(/\D/g, ''));
                 if (custNumberId) {
-                    await client.sendMessage(custNumberId._serialized,
+                    await safeSendMessage(client, custNumberId._serialized,
                         `✅ *Payment Confirmed!*\n\nHi *${invoice.customerName}*, your payment of *₹${invoice.finalAmount.toLocaleString()}* for Invoice *#${invNo}* has been verified and confirmed.\n\nThank you! 🙏`
                     );
                 }
@@ -118,9 +142,9 @@ const initWhatsApp = async (userId) => {
 
             const invNo = invoice._id.slice(-6).toUpperCase();
 
-            const custNumberId = await client.getNumberId(senderPhone);
+            const custNumberId = await safeGetNumberId(client, senderPhone);
             if (custNumberId) {
-                await client.sendMessage(custNumberId._serialized,
+                await safeSendMessage(client, custNumberId._serialized,
                     `🙏 Thank you *${invoice.customerName}*! Your payment claim for Invoice *#${invNo}* (₹${invoice.finalAmount.toLocaleString()}) has been received.\n\nWe'll verify and confirm shortly.`
                 );
             }
@@ -131,9 +155,9 @@ const initWhatsApp = async (userId) => {
             });
 
             if (user?.businessPhone) {
-                const ownerNumberId = await client.getNumberId(user.businessPhone.replace(/\D/g, ''));
+                const ownerNumberId = await safeGetNumberId(client, user.businessPhone.replace(/\D/g, ''));
                 if (ownerNumberId) {
-                    await client.sendMessage(ownerNumberId._serialized,
+                    await safeSendMessage(client, ownerNumberId._serialized,
                         `🔔 *Payment Claim!*\n\n*${invoice.customerName}* (${invoice.customerPhone}) claims to have paid *₹${invoice.finalAmount.toLocaleString()}* for Invoice *#${invNo}*.\n\nPlease check your UPI app and vote below:`
                     );
                     const ownerPoll = new Poll(
@@ -141,8 +165,10 @@ const initWhatsApp = async (userId) => {
                         ['✅ Yes, Received', '❌ No, Not Received'],
                         { allowMultipleAnswers: false }
                     );
-                    const ownerPollMsg = await client.sendMessage(ownerNumberId._serialized, ownerPoll);
-                    ownerPollMap[ownerPollMsg.id._serialized] = { invoiceId: invoice._id, backendUrl };
+                    const ownerPollMsg = await safeSendMessage(client, ownerNumberId._serialized, ownerPoll);
+                    if (ownerPollMsg) {
+                        ownerPollMap[ownerPollMsg.id._serialized] = { invoiceId: invoice._id, backendUrl };
+                    }
                 }
             }
         } catch (err) {
@@ -150,9 +176,48 @@ const initWhatsApp = async (userId) => {
         }
     });
 
-    await client.initialize();
-    clients[userId] = client;
-    return client;
+    try {
+        await client.initialize();
+        clients[userId] = client;
+        return client;
+    } catch (error) {
+        console.error(`Failed to initialize WhatsApp for ${userId}:`, error.message);
+        qrStrings[userId] = 'INIT_ERROR';
+        throw error;
+    }
+};
+
+// Safe wrapper functions to handle execution context errors
+const safeGetNumberId = async (client, phone, retries = 2) => {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await client.getNumberId(phone);
+        } catch (error) {
+            if (error.message.includes('Execution context was destroyed') && i < retries) {
+                console.log(`Retrying getNumberId for ${phone} (attempt ${i + 2})`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+            console.error(`Failed to get number ID for ${phone}:`, error.message);
+            return null;
+        }
+    }
+};
+
+const safeSendMessage = async (client, chatId, message, retries = 2) => {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await client.sendMessage(chatId, message);
+        } catch (error) {
+            if (error.message.includes('Execution context was destroyed') && i < retries) {
+                console.log(`Retrying sendMessage to ${chatId} (attempt ${i + 2})`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+            console.error(`Failed to send message to ${chatId}:`, error.message);
+            return null;
+        }
+    }
 };
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -168,6 +233,7 @@ app.post('/init', requireSecret, async (req, res) => {
         await initWhatsApp(userId);
         res.json({ status: qrStrings[userId] || 'INITIALIZING' });
     } catch (err) {
+        console.error(`Init error for ${userId}:`, err.message);
         res.status(500).json({ message: err.message });
     }
 });
@@ -188,16 +254,16 @@ app.post('/send', requireSecret, async (req, res) => {
 
     try {
         const cleanedPhone = phone.replace(/\D/g, '');
-        const numberId = await client.getNumberId(cleanedPhone);
+        const numberId = await safeGetNumberId(client, cleanedPhone);
         if (!numberId) return res.status(400).json({ message: `${cleanedPhone} is not on WhatsApp` });
 
         const chatId = numberId._serialized;
 
         if (pdfBase64) {
             const media = new MessageMedia('application/pdf', pdfBase64, 'invoice.pdf');
-            await client.sendMessage(chatId, media, { caption: message });
+            await safeSendMessage(client, chatId, media, { caption: message });
         } else {
-            await client.sendMessage(chatId, message);
+            await safeSendMessage(client, chatId, message);
         }
 
         // Payment confirmation poll
@@ -206,10 +272,11 @@ app.post('/send', requireSecret, async (req, res) => {
             ['✅ Yes, I Have Paid', '❌ Not Yet'],
             { allowMultipleAnswers: false }
         );
-        await client.sendMessage(chatId, poll);
+        await safeSendMessage(client, chatId, poll);
 
         res.json({ message: 'Sent successfully' });
     } catch (err) {
+        console.error(`Send error for ${userId}:`, err.message);
         res.status(500).json({ message: err.message });
     }
 });
@@ -219,11 +286,25 @@ app.post('/disconnect', requireSecret, async (req, res) => {
     const { userId } = req.body;
     const client = clients[userId];
     if (client) {
-        await client.destroy();
+        try {
+            await client.destroy();
+        } catch (error) {
+            console.error(`Error destroying client for ${userId}:`, error.message);
+        }
         delete clients[userId];
         delete qrStrings[userId];
     }
     res.json({ message: 'Disconnected' });
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error.message);
+    console.error(error.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 const PORT = process.env.PORT || 3001;
