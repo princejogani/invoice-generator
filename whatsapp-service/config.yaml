@@ -1,0 +1,7 @@
+tunnel: whatsapp-service
+credentials-file: /users/yourname/.cloudflared/<YOUR-TUNNEL-ID>.json
+
+ingress:
+  - hostname: wa.billing-generator.co.in
+    service: http://localhost:3001  # Change 3001 to your WhatsApp app port
+  - service: http_status:404
