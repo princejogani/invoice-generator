@@ -8,6 +8,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+# Download Puppeteer's bundled Chromium
+RUN npx puppeteer browsers install chrome
+
 # Copy the rest of your code
 COPY . .
 

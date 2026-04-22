@@ -42,7 +42,7 @@ const initWhatsApp = async (userId) => {
             backupSyncIntervalMs: 300000,
         }),
         puppeteer: {
-            executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
+            executablePath: process.env.CHROME_PATH || require('puppeteer').executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
