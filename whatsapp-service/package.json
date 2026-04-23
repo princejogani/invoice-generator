@@ -5,6 +5,7 @@
   "scripts": {
     "start": "NODE_ENV=production node server.js",
     "dev": "NODE_ENV=development nodemon server.js",
+    "tunnel": "cloudflared tunnel --config config.yaml run whatsapp-service",
     "pm2:start": "pm2 start ecosystem.config.js --env production",
     "pm2:dev": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop whatsapp-service",

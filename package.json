@@ -7,7 +7,7 @@
         "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:whatsapp\"",
         "dev:backend": "cd backend && npm run dev",
         "dev:frontend": "cd frontend && npm run dev",
-        "dev:whatsapp": "cd whatsapp-service && npm run dev",
+        "dev:whatsapp": "concurrently \"cd whatsapp-service && npm run dev\" \"cd whatsapp-service && npm run tunnel\"",
         "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
         "start:backend": "cd backend && NODE_ENV=production npm start",
         "start:frontend": "cd frontend && npm run preview",
