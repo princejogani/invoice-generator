@@ -8,13 +8,13 @@ import {
 } from 'recharts';
 
 const StatCard = ({ title, value, icon: Icon, color, sub }) => (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center space-x-4">
-        <div className={`p-3 rounded-lg ${color}`}>
-            <Icon size={24} className="text-white" />
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 min-w-0">
+        <div className={`p-3 rounded-lg shrink-0 ${color}`}>
+            <Icon size={20} className="text-white" />
         </div>
-        <div>
-            <p className="text-sm text-slate-500 font-medium">{title}</p>
-            <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
+        <div className="min-w-0">
+            <p className="text-xs text-slate-500 font-medium">{title}</p>
+            <h3 className="text-lg font-bold text-slate-800 whitespace-nowrap leading-tight">{value}</h3>
             {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
         </div>
     </div>

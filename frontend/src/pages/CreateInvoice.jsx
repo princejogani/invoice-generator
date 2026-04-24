@@ -24,6 +24,9 @@ const CreateInvoice = () => {
     const [customerOptions, setCustomerOptions] = useState([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [loadingCustomers, setLoadingCustomers] = useState(false);
+    const [productSearch, setProductSearch] = useState({});
+    const [openProductDropdown, setOpenProductDropdown] = useState(null);
+    const productDropdownRef = useRef(null);
 
     useEffect(() => {
         fetchStatus();
@@ -87,6 +90,16 @@ const CreateInvoice = () => {
     };
 
     const searchTimeoutRef = useRef(null);
+
+    // Close product dropdown on outside click
+    useEffect(() => {
+        const handler = (e) => {
+            if (productDropdownRef.current && !productDropdownRef.current.contains(e.target))
+                setOpenProductDropdown(null);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
 
     const fetchCustomers = async (searchTerm) => {
         if (!searchTerm.trim()) {
@@ -406,18 +419,59 @@ const CreateInvoice = () => {
                     <div key={index} className="flex flex-col md:grid md:grid-cols-12 gap-4 bg-slate-50 p-4 rounded-lg relative border border-slate-100">
                         <div className="md:col-span-6">
                             <label className="block text-xs font-medium text-slate-500 mb-1">Select Product (Optional)</label>
-                            <select
-                                className="w-full p-2 border border-slate-300 rounded text-sm mb-2"
-                                value={item.productId || ''}
-                                onChange={(e) => handleProductSelect(index, e.target.value)}
-                            >
-                                <option value="">-- Choose a product --</option>
-                                {products.map(product => (
-                                    <option key={product._id} value={product._id}>
-                                        {product.name} - ₹{product.price}
-                                    </option>
-                                ))}
-                            </select>
+                            {/* Searchable product dropdown */}
+                            <div className="relative mb-2" ref={openProductDropdown === index ? productDropdownRef : null}>
+                                <div
+                                    className="w-full p-2 border border-slate-300 rounded text-sm cursor-pointer flex justify-between items-center bg-white"
+                                    onClick={() => setOpenProductDropdown(openProductDropdown === index ? null : index)}
+                                >
+                                    <span className={item.productId ? 'text-slate-800' : 'text-slate-400'}>
+                                        {item.productId
+                                            ? products.find(p => p._id === item.productId)?.name + ' — ₹' + products.find(p => p._id === item.productId)?.price
+                                            : '-- Choose a product --'}
+                                    </span>
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                </div>
+                                {openProductDropdown === index && (
+                                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg">
+                                        <div className="p-2 border-b border-slate-100">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                placeholder="Search products..."
+                                                className="w-full p-1.5 text-sm border border-slate-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                                                value={productSearch[index] || ''}
+                                                onChange={(e) => setProductSearch(prev => ({ ...prev, [index]: e.target.value }))}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </div>
+                                        <div className="max-h-48 overflow-y-auto">
+                                            {/* <div
+                                                className="px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 cursor-pointer"
+                                                onMouseDown={() => { handleProductSelect(index, ''); setOpenProductDropdown(null); setProductSearch(prev => ({ ...prev, [index]: '' })); }}
+                                            >-- None --</div> */}
+                                            {products
+                                                .filter(p => !productSearch[index] || p.name.toLowerCase().includes(productSearch[index].toLowerCase()))
+                                                .map(product => (
+                                                    <div
+                                                        key={product._id}
+                                                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 flex justify-between items-center ${
+                                                            item.productId === product._id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'
+                                                        }`}
+                                                        onMouseDown={() => { handleProductSelect(index, product._id); setOpenProductDropdown(null); setProductSearch(prev => ({ ...prev, [index]: '' })); }}
+                                                    >
+                                                        <span>{product.name}</span>
+                                                        <span className="text-slate-400 text-xs">₹{product.price}</span>
+                                                    </div>
+                                                ))
+                                            }
+                                            {products.filter(p => !productSearch[index] || p.name.toLowerCase().includes(productSearch[index].toLowerCase())).length === 0 && (
+                                                <div className="px-3 py-2 text-sm text-slate-400">No products found</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <label className="block text-xs font-medium text-slate-500 mb-1">Item Name</label>
                             <input
                                 type="text"
@@ -450,7 +504,7 @@ const CreateInvoice = () => {
                                 />
                             </div>
                             {type === 'GST' && (
-                                <div className="flex-1 md:col-span-1">
+                                <div className="flex-1 md:col-span-2">
                                     <label className="block text-xs font-medium text-slate-500 mb-1">GST %</label>
                                     <input
                                         type="number"

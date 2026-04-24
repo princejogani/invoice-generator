@@ -1,8 +1,8 @@
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Package, Search, Plus, Edit, Trash2, Tag } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Search, Plus, Edit, Trash2, MoreVertical, FileText } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 
 const ProductList = () => {
     const navigate = useNavigate();
@@ -91,6 +91,27 @@ const ProductList = () => {
     };
 
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [openMenu, setOpenMenu] = useState(null);
+    const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenu(null);
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const toggleMenu = (e, id) => {
+        if (openMenu === id) { setOpenMenu(null); return; }
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMenuPos({
+            top: rect.bottom + window.scrollY + 4,
+            left: rect.right + window.scrollX - 160,
+        });
+        setOpenMenu(id);
+    };
 
     const handleDelete = async (id) => {
         if (deleteConfirm !== id) { setDeleteConfirm(id); return; }
@@ -281,127 +302,105 @@ const ProductList = () => {
                 </div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {products.map((product) => (
-                            <div key={product._id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center space-x-3">
-                                        <div className={`p-3 rounded-full ${product.isActive ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
-                                            <Package size={20} />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-lg text-slate-800">{product.name}</h3>
-                                            <div className="flex items-center text-slate-500 text-sm">
-                                                <Tag size={12} className="mr-1" />
-                                                {product.category || 'Uncategorized'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => handleEdit(product)}
-                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded"
-                                            title="Edit"
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(product._id)}
-                                            className={`p-2 rounded text-xs font-bold transition ${
-                                                deleteConfirm === product._id
-                                                    ? 'bg-red-600 text-white px-2'
-                                                    : 'text-red-600 hover:bg-red-50'
-                                            }`}
-                                            title="Delete"
-                                        >
-                                            {deleteConfirm === product._id ? 'Confirm?' : <Trash2 size={16} />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3 pt-4 border-t border-slate-100 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">Price</span>
-                                        <span className="font-bold text-slate-800 flex items-center">
-                                            ₹{product.price.toLocaleString()}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">Unit</span>
-                                        <span className="font-medium text-slate-700">{product.unit}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">GST</span>
-                                        <span className="font-medium text-slate-700">{product.taxRate}%</span>
-                                    </div>
-                                    {product.sku && (
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">SKU</span>
-                                            <span className="font-mono text-slate-700">{product.sku}</span>
-                                        </div>
-                                    )}
-                                    {product.description && (
-                                        <div className="pt-2 text-slate-600 text-xs">
-                                            {product.description}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex gap-2 mt-6">
-                                    <button
-                                        onClick={() => navigate('/invoices/create', { state: { selectedProduct: product } })}
-                                        className="flex-1 bg-blue-50 text-blue-700 py-2 rounded font-medium hover:bg-blue-100 transition border border-blue-200"
-                                    >
-                                        Use in Invoice
-                                    </button>
-                                    <button
-                                        onClick={() => handleEdit(product)}
-                                        className="flex-1 bg-slate-50 text-slate-700 py-2 rounded font-medium hover:bg-slate-100 transition border border-slate-200"
-                                    >
-                                        Edit
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">#</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Name</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Category</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Price</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Unit</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">GST %</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">SKU</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {products.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={9} className="text-center py-16 text-slate-400">
+                                                No products found. Add your first product to speed up invoice creation.
+                                            </td>
+                                        </tr>
+                                    ) : products.map((product, i) => (
+                                        <tr key={product._id} className="hover:bg-slate-50 transition">
+                                            <td className="px-4 py-3 text-slate-400">{(page - 1) * 10 + i + 1}</td>
+                                            <td className="px-4 py-3 font-medium text-slate-800">{product.name}</td>
+                                            <td className="px-4 py-3 text-slate-500">{product.category || '—'}</td>
+                                            <td className="px-4 py-3 font-semibold text-slate-800">₹{product.price.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-slate-600">{product.unit}</td>
+                                            <td className="px-4 py-3 text-slate-600">{product.taxRate}%</td>
+                                            <td className="px-4 py-3 text-slate-500 font-mono">{product.sku || '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${product.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                    {product.isActive ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <button
+                                                    onClick={(e) => toggleMenu(e, product._id)}
+                                                    className="p-1.5 rounded hover:bg-slate-100 text-slate-500 transition"
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    {products.length === 0 && !loading && (
-                        <div className="text-center py-16">
-                            <Package className="mx-auto text-slate-300" size={64} />
-                            <h3 className="text-xl font-medium text-slate-500 mt-4">No products found</h3>
-                            <p className="text-slate-400 mt-2">Create your first product to speed up invoice creation</p>
-                            <button
-                                onClick={() => setShowForm(true)}
-                                className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white py-2 px-6 rounded-lg font-medium hover:bg-blue-700 transition"
-                            >
-                                <Plus size={18} />
-                                Add Product
-                            </button>
-                        </div>
-                    )}
-
                     {totalPages > 1 && (
-                        <div className="flex justify-center items-center gap-4 mt-12">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                                className="px-4 py-2 border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Previous
-                            </button>
-                            <span className="text-slate-700">
-                                Page {page} of {totalPages}
-                            </span>
-                            <button
-                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                disabled={page === totalPages}
-                                className="px-4 py-2 border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Next
-                            </button>
+                        <div className="flex justify-center items-center gap-4 mt-4">
+                            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                                className="px-4 py-2 border border-slate-300 rounded-lg disabled:opacity-50">Previous</button>
+                            <span className="text-slate-700 text-sm">Page {page} of {totalPages}</span>
+                            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                                className="px-4 py-2 border border-slate-300 rounded-lg disabled:opacity-50">Next</button>
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Dropdown Menu — fixed position to avoid scrollbar */}
+            {openMenu && (
+                <div
+                    ref={menuRef}
+                    style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 9999, width: 160 }}
+                    className="bg-white border border-slate-200 rounded-lg shadow-lg py-1"
+                >
+                    {(() => {
+                        const product = products.find(p => p._id === openMenu);
+                        if (!product) return null;
+                        return (
+                            <>
+                                {/* <button
+                                    onClick={() => { setOpenMenu(null); navigate('/invoices/create', { state: { selectedProduct: product } }); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                >
+                                    <FileText size={14} /> Use in Invoice
+                                </button> */}
+                                <button
+                                    onClick={() => { setOpenMenu(null); handleEdit(product); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                >
+                                    <Edit size={14} /> Edit Product
+                                </button>
+                                <button
+                                    onClick={() => { setOpenMenu(null); handleDelete(product._id); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                >
+                                    <Trash2 size={14} />
+                                    {deleteConfirm === product._id ? 'Click again to confirm' : 'Delete Product'}
+                                </button>
+                            </>
+                        );
+                    })()}
+                </div>
             )}
         </div>
     );

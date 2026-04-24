@@ -205,9 +205,9 @@ const getDashboardStats = async (req, res) => {
         const now = new Date();
         const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-        const [invoiceStats, customerCount, monthlyRevenue, recentInvoices] = await Promise.all([
+        const [invoiceStats, customerCount, monthlyRevenue, topCustomers] = await Promise.all([
             Invoice.aggregate([
-                { $match: { userId, isDraft: false } },
+                { $match: { userId, isDraft: { $ne: true } } },
                 {
                     $group: {
                         _id: null,
@@ -227,7 +227,7 @@ const getDashboardStats = async (req, res) => {
             Customer.countDocuments({ userId }),
             // Monthly revenue for last 6 months
             Invoice.aggregate([
-                { $match: { userId, isDraft: false, createdAt: { $gte: sixMonthsAgo } } },
+                { $match: { userId, isDraft: { $ne: true }, createdAt: { $gte: sixMonthsAgo } } },
                 {
                     $group: {
                         _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
@@ -239,7 +239,7 @@ const getDashboardStats = async (req, res) => {
             ]),
             // Top 5 customers by total invoiced
             Invoice.aggregate([
-                { $match: { userId, isDraft: false } },
+                { $match: { userId, isDraft: { $ne: true } } },
                 { $group: { _id: '$customerName', total: { $sum: '$finalAmount' }, count: { $sum: 1 } } },
                 { $sort: { total: -1 } },
                 { $limit: 5 }
@@ -265,7 +265,7 @@ const getDashboardStats = async (req, res) => {
             unpaidCount: stats.unpaidCount,
             partialCount: stats.partialCount,
             monthlyRevenue: formattedMonthly,
-            topCustomers: recentInvoices,
+            topCustomers: topCustomers,
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
